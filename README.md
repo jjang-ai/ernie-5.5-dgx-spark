@@ -14,6 +14,22 @@
 
 ---
 
+## Benchmark Highlights (`2×` vs `2×2` vs `4×` Switchless DGX Spark, `v0.5.0`)
+
+![ERNIE 5.5 Flash Preview MXFP4 — Switchless 2x-4x DGX Spark Stack Overview](assets/charts/06_hero_summary_card.png)
+
+| Single-Stream Decode (`B=1`, Code vs Prose) | Batched Concurrency (`B=1` to `B=64`, `0` Loops) |
+|:---:|:---:|
+| ![Single-Stream Decode](assets/charts/01_single_stream_code_vs_prose.png) | ![Concurrency Scaling](assets/charts/04_concurrency_scaling.png) |
+
+| Growing Context `8K` to `1M` — Prefill & Warm TTFT | Decode Speed Across `100K` to `1M` Context |
+|:---:|:---:|
+| ![1M Context Prefill & TTFT](assets/charts/02_1m_context_ladder_prefill_ttft.png) | ![1M Context Decode Speed](assets/charts/03_1m_context_ladder_decode.png) |
+
+![Harsh Prefix-Cache & Triple-API Speedups (OpenAI Chat, Responses & Anthropic)](assets/charts/05_prefix_cache_multi_api.png)
+
+---
+
 ## Verified Live Performance (`ERNIE-5.5-Flash-Preview` MXFP4 on GB10, `v0.5.0`)
 
 All numbers below were measured end-to-end on real **2× and 4× NVIDIA DGX Spark (`GB10`, `sm_121`, 121.7 GiB unified RAM, DGX OS `7.6.0` / Linux `7.0.0-1025-nvidia` + `kho=off`, ConnectX-7 FW `28.50.1002` unthrottled `200GbE` MTU 9000)** serving [`dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4`](https://huggingface.co/dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4) with **DSpark Adaptive Verification ON**, official sampling (`T=1.0, top_p=0.95` unless noted), and **zero loops (`0` loops across every single run)**:
