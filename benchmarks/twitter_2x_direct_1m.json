@@ -1,0 +1,280 @@
+{
+  "label": "2x_direct_1m_dspark",
+  "model": "ernie55",
+  "single_stream": {
+    "easy_code_T1": {
+      "pt": 49,
+      "cached": 0,
+      "ct": 270,
+      "dt": 3.388,
+      "ttft_s": 0.202,
+      "dec_tps": 84.43,
+      "e2e_tps": 79.69,
+      "finish_reason": "stop",
+      "loop": false,
+      "preview": "```python from collections import OrderedDict   class LRUCache:     def __init__(self, capacity: int):         if capacity <= 0:            "
+    },
+    "easy_code_T0": {
+      "pt": 49,
+      "cached": 0,
+      "ct": 252,
+      "dt": 2.8949,
+      "ttft_s": 0.1913,
+      "dec_tps": 92.84,
+      "e2e_tps": 87.05,
+      "finish_reason": "stop",
+      "loop": false,
+      "preview": "```python from collections import OrderedDict   class LRUCache:     def __init__(self, capacity: int):         if capacity <= 0:            "
+    },
+    "hard_code_high_T1": {
+      "pt": 57,
+      "cached": 0,
+      "ct": 512,
+      "dt": 12.5784,
+      "ttft_s": 0.2184,
+      "dec_tps": 41.34,
+      "e2e_tps": 40.7,
+      "finish_reason": "length",
+      "loop": false,
+      "preview": ""
+    },
+    "prose_off_T1": {
+      "pt": 44,
+      "cached": 0,
+      "ct": 384,
+      "dt": 9.168,
+      "ttft_s": 0.1842,
+      "dec_tps": 42.63,
+      "e2e_tps": 41.88,
+      "finish_reason": "length",
+      "loop": false,
+      "preview": "### 1. The Fundamental Problem  Distributed consensus protocols solve a specific problem: how can a cluster of unreliable machines agree on "
+    },
+    "prose_off_T0": {
+      "pt": 44,
+      "cached": 0,
+      "ct": 384,
+      "dt": 9.0003,
+      "ttft_s": 0.1913,
+      "dec_tps": 43.48,
+      "e2e_tps": 42.67,
+      "finish_reason": "length",
+      "loop": false,
+      "preview": "This explanation covers the mechanics of consensus protocols, focusing on how they maintain safety (correctness) and availability (liveness)"
+    },
+    "prose_high_T1": {
+      "pt": 61,
+      "cached": 0,
+      "ct": 512,
+      "dt": 12.381,
+      "ttft_s": 0.1552,
+      "dec_tps": 41.8,
+      "e2e_tps": 41.35,
+      "finish_reason": "length",
+      "loop": false,
+      "preview": ""
+    },
+    "zh_math_high_T1": {
+      "pt": 52,
+      "cached": 0,
+      "ct": 371,
+      "dt": 5.1082,
+      "ttft_s": 0.1397,
+      "dec_tps": 74.47,
+      "e2e_tps": 72.63,
+      "finish_reason": "stop",
+      "loop": false,
+      "preview": "\u5e73\u5747\u901f\u5ea6 = \u603b\u8def\u7a0b \u00f7 \u603b\u65f6\u95f4\u3002  \u6b65\u9aa4\uff1a  1. \u603b\u8def\u7a0b = 120 + 120 = 240 \u516c\u91cc\u3002  2. \u53bb\u7a0b\u65f6\u95f4 = 120 \u516c\u91cc \u00f7 60 \u516c\u91cc/\u5c0f\u65f6 = 2 \u5c0f\u65f6\u3002  3. \u8fd4\u7a0b\u65f6\u95f4 = 120 \u516c\u91cc \u00f7 40 \u516c\u91cc/\u5c0f\u65f6 = 3 \u5c0f\u65f6\u3002  4. \u603b\u65f6\u95f4 = 2 +"
+    }
+  },
+  "short_cold_prefill": {
+    "8k": {
+      "prompt_tokens": 8241,
+      "cold_ttft_s": 4.3365,
+      "cold_prefill_tps": 1900.4,
+      "warm_ttft_s": 0.3799,
+      "warm_cached_tokens": 7936,
+      "warm_speedup_x": 11.41,
+      "warm_dec_tps": 60.45,
+      "recall_cold": true,
+      "recall_warm": true
+    },
+    "32k": {
+      "prompt_tokens": 32626,
+      "cold_ttft_s": 16.9009,
+      "cold_prefill_tps": 1930.4,
+      "warm_ttft_s": 0.4854,
+      "warm_cached_tokens": 32256,
+      "warm_speedup_x": 34.82,
+      "warm_dec_tps": 64.08,
+      "recall_cold": true,
+      "recall_warm": true
+    }
+  },
+  "context_ladder": [
+    {
+      "step": 1,
+      "target_k": 100,
+      "prompt_tokens": 100070,
+      "new_prefill_tokens": 100070,
+      "inc_cold_ttft_s": 57.2476,
+      "inc_cold_prefill_tps": 1748.0,
+      "cum_cold_ttft_s": 57.25,
+      "cum_cold_prefill_tps": 1748.0,
+      "warm_code_ttft_s": 1.0833,
+      "warm_code_dec_tps": 80.55,
+      "warm_code_e2e_tps": 57.64,
+      "warm_prose_ttft_s": 1.0797,
+      "warm_prose_dec_tps": 42.01,
+      "warm_prose_e2e_tps": 35.81,
+      "recall_cold_end": true,
+      "recall_warm_start": true,
+      "recall_warm_end": true,
+      "loops": 0
+    },
+    {
+      "step": 2,
+      "target_k": 200,
+      "prompt_tokens": 200098,
+      "new_prefill_tokens": 100514,
+      "inc_cold_ttft_s": 74.1248,
+      "inc_cold_prefill_tps": 1356.0,
+      "cum_cold_ttft_s": 131.37,
+      "cum_cold_prefill_tps": 1523.1,
+      "warm_code_ttft_s": 1.5664,
+      "warm_code_dec_tps": 72.3,
+      "warm_code_e2e_tps": 40.25,
+      "warm_prose_ttft_s": 1.3374,
+      "warm_prose_dec_tps": 37.91,
+      "warm_prose_e2e_tps": 31.75,
+      "recall_cold_end": true,
+      "recall_warm_start": true,
+      "recall_warm_end": true,
+      "loops": 0
+    },
+    {
+      "step": 3,
+      "target_k": 300,
+      "prompt_tokens": 300096,
+      "new_prefill_tokens": 100416,
+      "inc_cold_ttft_s": 90.3946,
+      "inc_cold_prefill_tps": 1110.9,
+      "cum_cold_ttft_s": 221.77,
+      "cum_cold_prefill_tps": 1353.2,
+      "warm_code_ttft_s": 1.7148,
+      "warm_code_dec_tps": 70.83,
+      "warm_code_e2e_tps": 44.37,
+      "warm_prose_ttft_s": 1.6949,
+      "warm_prose_dec_tps": 37.82,
+      "warm_prose_e2e_tps": 30.34,
+      "recall_cold_end": true,
+      "recall_warm_start": true,
+      "recall_warm_end": true,
+      "loops": 0
+    },
+    {
+      "step": 4,
+      "target_k": 400,
+      "prompt_tokens": 400047,
+      "new_prefill_tokens": 100271,
+      "inc_cold_ttft_s": 106.578,
+      "inc_cold_prefill_tps": 940.8,
+      "cum_cold_ttft_s": 328.35,
+      "cum_cold_prefill_tps": 1218.4,
+      "warm_code_ttft_s": 2.2475,
+      "warm_code_dec_tps": 75.64,
+      "warm_code_e2e_tps": 34.4,
+      "warm_prose_ttft_s": 2.2735,
+      "warm_prose_dec_tps": 37.56,
+      "warm_prose_e2e_tps": 28.25,
+      "recall_cold_end": true,
+      "recall_warm_start": true,
+      "recall_warm_end": true,
+      "loops": 0
+    }
+  ],
+  "concurrency_prose": {
+    "1": {
+      "agg_tps": 38.37,
+      "per_req_dec_tps": 39.53,
+      "avg_ttft_s": 0.218,
+      "wall_s": 6.672,
+      "tot_tokens": 256,
+      "loops": 0
+    },
+    "2": {
+      "agg_tps": 61.26,
+      "per_req_dec_tps": 32.04,
+      "avg_ttft_s": 0.241,
+      "wall_s": 8.358,
+      "tot_tokens": 512,
+      "loops": 0
+    },
+    "4": {
+      "agg_tps": 93.87,
+      "per_req_dec_tps": 24.92,
+      "avg_ttft_s": 0.445,
+      "wall_s": 10.908,
+      "tot_tokens": 1024,
+      "loops": 0
+    },
+    "8": {
+      "agg_tps": 148.53,
+      "per_req_dec_tps": 19.96,
+      "avg_ttft_s": 0.499,
+      "wall_s": 13.789,
+      "tot_tokens": 2048,
+      "loops": 0
+    },
+    "16": {
+      "agg_tps": 167.04,
+      "per_req_dec_tps": 11.49,
+      "avg_ttft_s": 0.739,
+      "wall_s": 24.521,
+      "tot_tokens": 4096,
+      "loops": 0
+    }
+  },
+  "concurrency_code": {
+    "1": {
+      "agg_tps": 61.64,
+      "per_req_dec_tps": 63.92,
+      "avg_ttft_s": 0.163,
+      "wall_s": 4.153,
+      "tot_tokens": 256,
+      "loops": 0
+    },
+    "2": {
+      "agg_tps": 97.78,
+      "per_req_dec_tps": 52.43,
+      "avg_ttft_s": 0.257,
+      "wall_s": 5.236,
+      "tot_tokens": 512,
+      "loops": 0
+    },
+    "4": {
+      "agg_tps": 149.58,
+      "per_req_dec_tps": 41.84,
+      "avg_ttft_s": 0.402,
+      "wall_s": 6.846,
+      "tot_tokens": 1024,
+      "loops": 0
+    },
+    "8": {
+      "agg_tps": 230.93,
+      "per_req_dec_tps": 32.67,
+      "avg_ttft_s": 0.542,
+      "wall_s": 8.869,
+      "tot_tokens": 2048,
+      "loops": 0
+    },
+    "16": {
+      "agg_tps": 306.53,
+      "per_req_dec_tps": 21.25,
+      "avg_ttft_s": 0.618,
+      "wall_s": 13.362,
+      "tot_tokens": 4096,
+      "loops": 0
+    }
+  }
+}

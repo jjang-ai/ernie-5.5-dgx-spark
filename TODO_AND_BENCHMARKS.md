@@ -65,8 +65,8 @@
 
 ### Stage 3 — Shareable All-in-One 2×–4× DGX Spark GitHub Repository
 - [x] Clean installable Python package (`pyproject.toml`, `spark_ernie_runtime`, `spark-ernie` CLI, `.gitignore`, zero manual venv hacks).
-- [x] One-command launchers & tested profiles for 2× Spark and 4× Spark (`2x-single-stream`, `2x-max-batch`, `2x-max-context`, `4x-single-stream`, `4x-max-batch`, `4x-ar-max-context`).
-- [x] Full reproducible benchmark suite + polished GitHub `README.md` with exact measured 2× and 4× Spark tables.
+- [x] One-command launchers & tested profiles for 2× Spark and 4× Spark (`2x-1m-fast`, `2x-1m-max-context`, `2x-max-batch`, `4x-1m-fast`, `4x-1m-max-context`, `4x-dual-tp2-fast`, `4x-dual-tp2-max-batch`).
+- [x] Full reproducible benchmark suite (`100K → 1M` ladder, `B=1..64` concurrency, harsh multi-API prefix-cache suite) + polished GitHub `README.md` with exact measured 2×, 2×2, and 4× Spark tables.
 
 ---
 
@@ -167,3 +167,61 @@
   - 8-Turn Coding (`T=1.0, high`): `8/8 stop`, **`0/8` loops**, `100%` Turn-1 recall (`~50–60` e2e tok/s per turn with sticky prefix affinity).
   - Concurrency (`B=1..16`, `2×` scaling across BOTH independent `TP=2` pairs): Code `B=2: 96.00`, `B=4: 131.28`, `B=8: 210.87`, **`B=16: 338.10 tok/s`** (**`2.01×` single `2×` pair & `4.31×` stock `78.4`**!); Prose `B=2: 72.34`, `B=4: 114.48`, `B=8: 186.43`, `B=16: 199.17+`.
   - Router v0.4.0 polish (unit-tested `<5 ms` first-token SSE latency + exact `['0','1']` concurrent spillover): switched SSE proxy from `resp.read(4096)` to line-by-line `resp.readline()` and tightened spillover to `inflight[preferred] == min_load` so dual-pair `2×32K` parallel cold prefill saturates BOTH pairs (**`~4,000 tok/s` aggregate capacity**).
+
+
+---
+
+## 11. `v0.5.0` Full `100K → 1M` Context Ladder, `B=1..64` Scaling & Harsh Multi-API Prefix-Cache Verification
+
+### 11.1 `4×` Switchless Ring (`4x-1m-fast`) Full `1,000,031` (`1M`) Context Ladder & `B=64` Scaling
+- **Benchmark Scripts & JSONs:** `benchmarks/bench_twitter_1m.py`, `benchmarks/twitter_4x_ring_1m_part1.json`, `benchmarks/twitter_4x_ring_1m_ladder.json`.
+- **Single-Stream (`B=1`, DSpark ON, `0` loops):**
+  - Easy Code (`T=1.0, top_p=0.95` / `T=0`): **`127.01`** / **`139.79 tok/s`** (`0.144s–0.148s` TTFT).
+  - Hard Code (`high, T=1.0`): **`57.61 tok/s`** (`0.152s` TTFT).
+  - Prose (`off T=1.0` / `T=0` / `high T=1.0`): **`59.16`** / **`64.16`** / **`57.32 tok/s`** (`0.098s–0.149s` TTFT).
+  - Chinese Math (`high, T=1.0`): **`104.77 tok/s`** (`0.134s` TTFT).
+- **Concurrency Sweep (`B=1..64`, `T=1.0, top_p=0.95`, DSpark ON, `0` loops across EVERY batch!):**
+  - **Easy Code:** `B=1: 89.2 (93.8/req)` · `B=2: 141.1 (76.5/req)` · `B=4: 213.5 (60.9/req)` · `B=8: 309.2 (42.3/req)` · `B=16: 441.4 (31.1/req)` · **`B=32: 611.0 (22.4/req)`** · **`B=64: 853.78 tok/s (15.80/req)`**!
+  - **Prose:** `B=1: 54.6 (56.2/req)` · `B=2: 70.0 (37.4/req)` · `B=4: 125.8 (33.6/req)` · `B=8: 210.6 (29.2/req)` · `B=16: 278.3 (19.3/req)` · **`B=32: 415.1 (14.7/req)`** · **`B=64: 604.46 tok/s (10.63/req)`**!
+- **Full `100K → 1,000,031` (`1M`) Context Ladder (`20/20 = 100%` start+end needle recall, `0` loops):**
+  - `100K`: `2,469 tok/s` (`40.5s`) | warm **`0.729s`** | dec **`104.1–113.5` code / `53.9–55.4` prose**
+  - `200K`: `1,826 tok/s` (`54.8s`) | warm **`1.411s`** | dec **`117.4` code / `53.0` prose**
+  - `300K`: `1,447 tok/s` (`69.1s`) | warm **`1.890s`** | dec **`103.2–105.2` code / `50.7–51.3` prose**
+  - `400K`: `1,175 tok/s` (`85.1s`) | warm **`2.104s`** | dec **`117.3` code / `49.3–54.0` prose**
+  - `500K`: `1,009 tok/s` (`99.1s`) | warm **`2.828s`** | dec **`114.5` code / `52.4` prose**
+  - `600K`: `874 tok/s` (`114.5s`) | dec **`96.4` code / `48.4` prose**
+  - `700K`: warm **`3.497s`** | dec **`88.7` code / `47.6` prose**
+  - `800K`: `713 tok/s` (`140.2s`) | dec **`93.3` code / `48.9` prose**
+  - `900K`: warm **`4.545s`** | dec **`83.9` code / `42.4` prose**
+  - **`1,000K` (`1,000,031` = `1M`!):** `+100K` `552.6 tok/s` (`181.0s`) | warm **`4.985s`** | dec **`80.7` code / `43.0` prose** | `True/True`!
+  - Set `4x-1m-fast` default `SPARK_GPU_MEM_UTIL=0.68` so every `4×` Ring boot retains `~38+ GiB` free unified RAM/node for OOM-proof `1M` DSA indexer scratch even at `max_num_seqs=32, mbt=8192`.
+
+### 11.2 `2×` Direct (`2x-1m-fast`) Full Category, `B=1..16` & `100K → 400K` Suite
+- **JSON:** `benchmarks/twitter_2x_direct_1m.json`.
+- **Single-Stream (`B=1`, DSpark ON, `0` loops):** Easy Code `T=1.0` **`84.43 tok/s`** / `T=0` **`92.84 tok/s`**, Hard Code `high` **`41.34`**, Prose `off T=1.0` **`42.63`** / `T=0` **`43.48`** / `high` **`41.80`**, Chinese Math `high` **`74.47 tok/s`**.
+- **Concurrency (`B=1..16`, `T=1.0, top_p=0.95`, `0` loops):**
+  - **Easy Code:** `B=1: 61.6 (63.9/req)` · `B=2: 97.8 (52.4/req)` · `B=4: 149.6 (41.8/req)` · `B=8: 230.9 (32.7/req)` · **`B=16: 306.53 tok/s (21.25/req)`** (**`3.91×` stock `78.4`!**).
+  - **Prose:** `B=1: 38.4 (39.5/req)` · `B=2: 61.3 (32.0/req)` · `B=4: 93.9 (24.9/req)` · `B=8: 148.5 (20.0/req)` · **`B=16: 167.04 tok/s (11.49/req)`**.
+- **Growing Context (`100K → 400K`, `8/8` recall, `0` loops, smooth SWA retention):**
+  - `8K`: `1,900 tok/s` (`4.34s` → `0.380s` warm `11.4×`); `32K`: `1,930 tok/s` (`16.90s` → `0.485s` warm `34.8×`).
+  - `100K`: `1,748 tok/s` (`57.2s`) | warm **`1.083s`** | dec **`80.5` code / `42.0` prose**
+  - `200K`: `1,356 tok/s` (`74.1s`) | warm **`1.566s`** | dec **`72.3` code / `37.9` prose**
+  - `300K`: `1,111 tok/s` (`90.4s`) | warm **`1.715s`** | dec **`70.8` code / `37.8` prose**
+  - `400K`: `941 tok/s` (`106.6s`) | warm **`2.248s`** | dec **`75.6` code / `37.6` prose**
+
+### 11.3 Harsh Prefix-Cache & Triple-API Verification (`Chat` + `Responses` + `Anthropic /v1/messages`)
+- **4 Upstream vLLM 0.32.0 + ERNIE 5.5 Bugs Identified & Fixed (`SPARK_PATCH_ANTHROPIC_COMPAT=1`):**
+  1. `prefix_cache_retention_interval` defaulted to `0` → kept only final 256-token SWA block, causing `100K`-token rollbacks on boundary suffixes. Enabled `--prefix-cache-retention-interval 2048` by default.
+  2. `--enable-prompt-tokens-details` defaulted off → reported `cached_tokens=0` / `cache_read_input_tokens=0` even on `96%+` hits. Enabled by default.
+  3. `AuthenticationMiddleware.verify_token` rejected Anthropic `x-api-key` headers, and `AnthropicServingMessages._detect_merge_inline_system(None)` falsely merged mid-conversation system reminders into message 0 (busting prefix cache) even though `encoding_ernie.py` natively supports inline system messages. Patched cleanly in `patch.py`.
+  4. `encoding_ernie.py` raised `ValueError` on `reasoning_effort` in `{"none", "off", "minimal", "max"}` and vLLM defaulted `--anthropic-disabled-thinking-effort` to `auto` (`low`). Patched normalizer in `patch.py` and passed `--anthropic-disabled-thinking-effort none`.
+- **Verified `4/4 PASS` on `2×` Direct (`benchmarks/harsh_prefix_apis_2x.json`):**
+  - `[1]` Chat SWA 256-token boundary torture (`12,967` tok): `6.532s` cold → **`0.447s–0.526s`** warm (**`95.9%–96.8%`**, `12.4×–14.6×` speedup, `4/4` recall).
+  - `[2]` Chat multi-turn `reasoning=high`: **`97.3%` (`0.465s`)** preserved / **`96.0%` (`0.515s`)** stripped.
+  - `[3]` OpenAI `/v1/responses`: `6.554s` cold → **`0.422s`** warm (**`96.7%`**, `12,544` cached, **`15.5×`**).
+  - `[4]` Anthropic `/v1/messages` + `count_tokens`: `6.547s` cold → **`0.414s`** warm `off` (**`96.8%`**, `12,544` `cache_read`, **`15.8×`**), **`0.767s`** warm `high` + inline `<system-reminder>` (**`96.4%`** cache hit, **`85.63 tok/s`** decode!), `count_tokens=12,955`.
+- **Verified `4/4 PASS` on `4×` Ring (`benchmarks/harsh_prefix_apis_4x.json`, with API key auth):**
+  - `[1]` Chat SWA 256-token boundary torture (`12,967` tok): `4.649s` cold → **`0.336s–0.366s`** warm (**`95.9%–96.8%`**, `12.7×–13.8×` speedup, `4/4` recall).
+  - `[2]` Chat multi-turn `reasoning=high`: **`97.5%` (`0.375s`)** preserved / **`95.9%` (`0.378s`)** stripped.
+  - `[3]` OpenAI `/v1/responses`: `4.647s` cold → **`0.352s`** warm (**`96.7%`**, `12,544` cached, **`13.2×`**).
+  - `[4]` Anthropic `/v1/messages` + `count_tokens` (`x-api-key` auth): `4.666s` cold → **`0.346s`** warm `off` (**`96.8%`**, `12,544` `cache_read`, **`13.5×`**), **`0.381s`** warm `high` + inline `<system-reminder>` (**`96.4%`** cache hit, **`12.2×` faster**, **`81.45 tok/s`** decode!), `count_tokens=12,955`.

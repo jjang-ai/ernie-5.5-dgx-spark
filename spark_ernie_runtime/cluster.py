@@ -54,7 +54,7 @@ PROFILES: dict[str, dict[str, str]] = {
         "SPARK_MAX_NUM_SEQS": "32",
         "SPARK_MAX_MODEL_LEN": "1048576",
         "SPARK_MAX_NUM_BATCHED_TOKENS": "8192",
-        "SPARK_GPU_MEM_UTIL": "0.80",
+        "SPARK_GPU_MEM_UTIL": "0.68",
     },
     "4x-1m-max-context": {
         "mode": "tp4-ar",
@@ -519,8 +519,11 @@ def cluster_status(url: str | None = None) -> int:
     port = int(cfg.get("port", 8000))
     if not url:
         if cluster:
-            h0 = cluster["nodes"][0]["ssh_host"]
-            url = f"http://127.0.0.1:{port}" if _is_local(h0) else f"http://{h0}:{port}"
+            n0 = cluster["nodes"][0]
+            h0 = n0["ssh_host"]
+            h0_name = n0.get("hostname", "")
+            h0_target = n0.get("host_ip") or h0
+            url = f"http://127.0.0.1:{port}" if _is_local(h0, h0_name) else f"http://{h0_target}:{port}"
         else:
             url = f"http://127.0.0.1:{port}"
     base = url.rstrip("/")

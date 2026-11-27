@@ -1,0 +1,74 @@
+{
+  "url": "http://127.0.0.1:8000/v1",
+  "model": "ernie55",
+  "checks": {
+    "chat_swa_boundary_prefix": {
+      "pass": true,
+      "cold_pt": 12967,
+      "cold_ttft_s": 4.6489,
+      "warm_runs": [
+        {
+          "pad_words": 0,
+          "pt": 12965,
+          "cached": 12544,
+          "hit_pct": 96.8,
+          "ttft_s": 0.3355,
+          "recall": true
+        },
+        {
+          "pad_words": 12,
+          "pt": 12977,
+          "cached": 12544,
+          "hit_pct": 96.7,
+          "ttft_s": 0.3417,
+          "recall": true
+        },
+        {
+          "pad_words": 48,
+          "pt": 13013,
+          "cached": 12544,
+          "hit_pct": 96.4,
+          "ttft_s": 0.3536,
+          "recall": true
+        },
+        {
+          "pad_words": 120,
+          "pt": 13085,
+          "cached": 12544,
+          "hit_pct": 95.9,
+          "ttft_s": 0.3661,
+          "recall": true
+        }
+      ]
+    },
+    "chat_multiturn_reasoning_prefix": {
+      "pass": true,
+      "preserved_hit_pct": 97.5,
+      "preserved_ttft_s": 0.3751,
+      "stripped_hit_pct": 95.9,
+      "stripped_ttft_s": 0.3784,
+      "recall": true
+    },
+    "responses_api_prefix_and_efforts": {
+      "pass": true,
+      "cold_ttft_s": 4.6473,
+      "warm_ttft_s": 0.352,
+      "warm_hit_pct": 96.7,
+      "warm_cached_tokens": 12544,
+      "high_reasoning_ok": true
+    },
+    "anthropic_messages_api": {
+      "pass": true,
+      "cold_ttft_s": 4.6662,
+      "warm_off_ttft_s": 0.3463,
+      "warm_off_hit_pct": 96.8,
+      "warm_off_cache_read": 12544,
+      "warm_think_ttft_s": 0.3805,
+      "warm_think_hit_pct": 96.4,
+      "warm_think_cache_read": 12544,
+      "warm_think_dec_tps": 81.45,
+      "count_tokens": 12955
+    }
+  },
+  "all_pass": true
+}
