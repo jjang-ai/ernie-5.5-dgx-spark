@@ -106,7 +106,7 @@ PROFILES: dict[str, dict[str, str]] = {
         "SPARK_MAX_NUM_BATCHED_TOKENS": "2048",
         "SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE": "64",
         "SPARK_KV_CACHE_MEMORY_BYTES": "9663676416",
-        "SPARK_GPU_MEM_UTIL": "0.86",
+        "SPARK_GPU_MEM_UTIL": "0.80",
         "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": "0",
     },
     "2x-1m-max-context": {
@@ -178,7 +178,7 @@ PROFILES: dict[str, dict[str, str]] = {
         "SPARK_MAX_NUM_BATCHED_TOKENS": "2048",
         "SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE": "64",
         "SPARK_KV_CACHE_MEMORY_BYTES": "9663676416",
-        "SPARK_GPU_MEM_UTIL": "0.86",
+        "SPARK_GPU_MEM_UTIL": "0.80",
         "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": "0",
     },
     "4x-dual-tp2-max-batch": {
