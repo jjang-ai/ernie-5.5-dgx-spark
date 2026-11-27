@@ -1,0 +1,394 @@
+--- a/nvidia-uvm/uvm_mmu.h	2026-07-07 09:36:55.000000000 -0400
++++ b/nvidia-uvm/uvm_mmu.h	2026-11-27 15:35:37.273565206 -0500
+@@ -126,6 +126,11 @@
+ // If the PTE format changes, this will need to move to the HAL.
+ #define UVM_GMMU_ATS_GRANULARITY (512ull * 1024 * 1024)
+ 
++#if PAGE_SIZE > 4096
++struct uvm_pt_subpage_slab_struct;
++typedef struct uvm_pt_subpage_slab_struct uvm_pt_subpage_slab_t;
++#endif
++
+ // This represents an allocation containing either a page table or page
+ // directory.
+ typedef struct
+@@ -139,6 +144,10 @@
+         struct page *page;
+         uvm_gpu_chunk_t *chunk;
+     } handle;
++#if PAGE_SIZE > 4096
++    uvm_pt_subpage_slab_t *subpage_slab;
++    NvU16 subpage_slot;
++#endif
+ } uvm_mmu_page_table_alloc_t;
+ 
+ // This structure in general refers to a page directory
+@@ -337,6 +346,16 @@
+ 
+     // Tracker for all GPU operations on the tree
+     uvm_tracker_t tracker;
++
++#if PAGE_SIZE > 4096
++    // Per-tree 4 KiB sub-page slab pool for non-root sysmem GPU page tables.
++    struct
++    {
++        spinlock_t lock;
++        struct list_head partial_slabs;
++        struct list_head full_slabs;
++    } pt_subpage_pool;
++#endif
+ };
+ 
+ // A vector of page table ranges
+--- a/nvidia-uvm/uvm_mmu.c	2026-07-07 09:36:55.000000000 -0400
++++ b/nvidia-uvm/uvm_mmu.c	2026-11-27 15:35:37.273102172 -0500
+@@ -38,6 +38,9 @@
+ 
+ #include <asm/io.h>
+ #include <linux/mm.h>
++#include <linux/slab.h>
++#include <linux/highmem.h>
++#include <linux/bitops.h>
+ 
+ // The page tree has 6 levels on Hopper+ GPUs, and the root is never freed by a
+ // normal 'put' operation which leaves a maximum of 5 levels.
+@@ -100,11 +103,80 @@
+     return NV_OK;
+ }
+ 
+-static NV_STATUS phys_mem_allocate_sysmem(uvm_page_tree_t *tree, NvLength size, uvm_mmu_page_table_alloc_t *out)
++#if PAGE_SIZE > 4096
++#define UVM_PT_SUBPAGE_SIZE 4096U
++#define UVM_PT_SUBPAGE_SLOTS (PAGE_SIZE / UVM_PT_SUBPAGE_SIZE)
++#define UVM_PT_SUBPAGE_FULL_MASK ((1UL << UVM_PT_SUBPAGE_SLOTS) - 1UL)
++
++struct uvm_pt_subpage_slab_struct
+ {
+-    NV_STATUS status = NV_OK;
++    struct list_head node;
++    struct page *page;
+     NvU64 dma_addr;
++    unsigned long used_mask;
++    bool dma_mapped;
++};
++
++static bool uvm_pt_subpage_alloc = true;
++module_param(uvm_pt_subpage_alloc, bool, S_IRUGO);
++MODULE_PARM_DESC(uvm_pt_subpage_alloc,
++                 "Pack non-root sysmem GPU page tables (<= 4 KiB) into 4 KiB slots on >4 KiB host kernels.");
++
++static atomic64_t g_uvm_pt_subpage_active_slots = ATOMIC64_INIT(0);
++static atomic64_t g_uvm_pt_subpage_active_slabs = ATOMIC64_INIT(0);
++static atomic64_t g_uvm_pt_subpage_peak_slots = ATOMIC64_INIT(0);
++static atomic64_t g_uvm_pt_subpage_peak_slabs = ATOMIC64_INIT(0);
++static atomic64_t g_uvm_pt_subpage_reuse_hits = ATOMIC64_INIT(0);
++static atomic64_t g_uvm_pt_subpage_fallbacks = ATOMIC64_INIT(0);
++
++static void uvm_pt_subpage_update_peak(atomic64_t *peak, s64 cur)
++{
++    s64 prev = atomic64_read(peak);
++
++    while (cur > prev && !atomic64_try_cmpxchg(peak, &prev, cur))
++        ;
++}
++
++static int uvm_pt_subpage_stats_get(char *buffer, const struct kernel_param *kp)
++{
++    s64 active_slots = atomic64_read(&g_uvm_pt_subpage_active_slots);
++    s64 active_slabs = atomic64_read(&g_uvm_pt_subpage_active_slabs);
++    s64 peak_slots = atomic64_read(&g_uvm_pt_subpage_peak_slots);
++    s64 peak_slabs = atomic64_read(&g_uvm_pt_subpage_peak_slabs);
++    s64 saved_pages = active_slots > active_slabs ? (active_slots - active_slabs) : 0;
++    s64 saved_kib = saved_pages * (s64)(PAGE_SIZE / 1024U);
++
++    (void)kp;
++    return scnprintf(buffer,
++                     PAGE_SIZE,
++                     "enabled=%d page_size=%lu slot_size=%u slots_per_page=%lu "
++                     "active_slots=%lld active_slabs=%lld peak_slots=%lld peak_slabs=%lld "
++                     "saved_kib=%lld reuse_hits=%lld fallbacks=%lld\n",
++                     uvm_pt_subpage_alloc ? 1 : 0,
++                     (unsigned long)PAGE_SIZE,
++                     UVM_PT_SUBPAGE_SIZE,
++                     (unsigned long)UVM_PT_SUBPAGE_SLOTS,
++                     (long long)active_slots,
++                     (long long)active_slabs,
++                     (long long)peak_slots,
++                     (long long)peak_slabs,
++                     (long long)saved_kib,
++                     (long long)atomic64_read(&g_uvm_pt_subpage_reuse_hits),
++                     (long long)atomic64_read(&g_uvm_pt_subpage_fallbacks));
++}
++
++static const struct kernel_param_ops uvm_pt_subpage_stats_ops = {
++    .get = uvm_pt_subpage_stats_get,
++};
++module_param_cb(uvm_pt_subpage_stats, &uvm_pt_subpage_stats_ops, NULL, S_IRUGO);
++MODULE_PARM_DESC(uvm_pt_subpage_stats,
++                 "Read-only telemetry for UVM 4 KiB sub-page GPU page-table slab packing.");
++#endif
++
++static struct page *phys_mem_alloc_sysmem_pages(uvm_page_tree_t *tree, unsigned int order)
++{
+     unsigned long flags = __GFP_ZERO;
++    struct page *page;
+     uvm_memcg_context_t memcg_context;
+     uvm_va_space_t *va_space = NULL;
+     struct mm_struct *mm = NULL;
+@@ -123,7 +195,7 @@
+     else
+         flags |= NV_UVM_GFP_FLAGS;
+ 
+-    out->handle.page = alloc_pages(flags, get_order(size));
++    page = alloc_pages(flags, order);
+ 
+     // va_space and mm will be set only if the memcg context has been started.
+     if (mm) {
+@@ -131,6 +203,132 @@
+         uvm_va_space_mm_release(va_space);
+     }
+ 
++    return page;
++}
++
++#if PAGE_SIZE > 4096
++static NV_STATUS phys_mem_allocate_sysmem_subpage(uvm_page_tree_t *tree,
++                                                  NvLength size,
++                                                  uvm_mmu_page_table_alloc_t *out)
++{
++    NV_STATUS status = NV_OK;
++    uvm_pt_subpage_slab_t *slab = NULL;
++    NvU16 slot = 0;
++    NvU64 dma_addr = 0;
++    s64 cur_slots;
++    s64 cur_slabs;
++
++    BUILD_BUG_ON(UVM_PT_SUBPAGE_SLOTS < 2 || UVM_PT_SUBPAGE_SLOTS > BITS_PER_LONG);
++
++    if (!uvm_pt_subpage_alloc || size == 0 || size > UVM_PT_SUBPAGE_SIZE)
++        return NV_ERR_NOT_SUPPORTED;
++
++    // Fast path: claim a free 4 KiB slot from an existing partial slab in O(1).
++    spin_lock(&tree->pt_subpage_pool.lock);
++    if (!list_empty(&tree->pt_subpage_pool.partial_slabs)) {
++        slab = list_first_entry(&tree->pt_subpage_pool.partial_slabs, uvm_pt_subpage_slab_t, node);
++        slot = (NvU16)__ffs(~slab->used_mask);
++        UVM_ASSERT(slot < UVM_PT_SUBPAGE_SLOTS);
++        slab->used_mask |= (1UL << slot);
++        if (slab->used_mask == UVM_PT_SUBPAGE_FULL_MASK)
++            list_move(&slab->node, &tree->pt_subpage_pool.full_slabs);
++    }
++    spin_unlock(&tree->pt_subpage_pool.lock);
++
++    if (slab != NULL) {
++        void *kaddr = kmap(slab->page);
++        memset((char *)kaddr + ((size_t)slot * UVM_PT_SUBPAGE_SIZE), 0, UVM_PT_SUBPAGE_SIZE);
++        wmb();
++        kunmap(slab->page);
++
++        out->handle.page = slab->page;
++        out->addr = uvm_gpu_phys_address(UVM_APERTURE_SYS,
++                                         slab->dma_addr + ((NvU64)slot * UVM_PT_SUBPAGE_SIZE));
++        out->size = size;
++        out->subpage_slab = slab;
++        out->subpage_slot = slot;
++
++        cur_slots = atomic64_inc_return(&g_uvm_pt_subpage_active_slots);
++        uvm_pt_subpage_update_peak(&g_uvm_pt_subpage_peak_slots, cur_slots);
++        atomic64_inc(&g_uvm_pt_subpage_reuse_hits);
++        return NV_OK;
++    }
++
++    // Slow path: allocate and DMA-map one host page outside the spinlock.
++    slab = kzalloc(sizeof(*slab), NV_UVM_GFP_FLAGS);
++    if (slab == NULL)
++        return NV_ERR_NO_MEMORY;
++
++    slab->page = phys_mem_alloc_sysmem_pages(tree, 0);
++    if (slab->page == NULL) {
++        kfree(slab);
++        return NV_ERR_NO_MEMORY;
++    }
++
++    if (tree->gpu->parent->pci_dev) {
++        status = uvm_gpu_map_cpu_pages(tree->gpu, slab->page, PAGE_SIZE, &dma_addr);
++        if (status != NV_OK) {
++            __free_pages(slab->page, 0);
++            kfree(slab);
++            return status;
++        }
++        slab->dma_mapped = true;
++    }
++    else {
++        dma_addr = page_to_phys(slab->page);
++        slab->dma_mapped = false;
++    }
++
++    if (!PAGE_ALIGNED(dma_addr)) {
++        if (slab->dma_mapped)
++            uvm_parent_gpu_unmap_cpu_pages(tree->gpu->parent, dma_addr, PAGE_SIZE);
++        __free_pages(slab->page, 0);
++        kfree(slab);
++        atomic64_inc(&g_uvm_pt_subpage_fallbacks);
++        return NV_ERR_NOT_SUPPORTED;
++    }
++
++    slab->dma_addr = dma_addr;
++    slab->used_mask = 1UL;
++
++    spin_lock(&tree->pt_subpage_pool.lock);
++    list_add(&slab->node, &tree->pt_subpage_pool.partial_slabs);
++    spin_unlock(&tree->pt_subpage_pool.lock);
++
++    out->handle.page = slab->page;
++    out->addr = uvm_gpu_phys_address(UVM_APERTURE_SYS, dma_addr);
++    out->size = size;
++    out->subpage_slab = slab;
++    out->subpage_slot = 0;
++
++    cur_slabs = atomic64_inc_return(&g_uvm_pt_subpage_active_slabs);
++    uvm_pt_subpage_update_peak(&g_uvm_pt_subpage_peak_slabs, cur_slabs);
++    cur_slots = atomic64_inc_return(&g_uvm_pt_subpage_active_slots);
++    uvm_pt_subpage_update_peak(&g_uvm_pt_subpage_peak_slots, cur_slots);
++    return NV_OK;
++}
++#endif
++
++static NV_STATUS phys_mem_allocate_sysmem(uvm_page_tree_t *tree,
++                                          NvLength size,
++                                          bool allow_subpage,
++                                          uvm_mmu_page_table_alloc_t *out)
++{
++    NV_STATUS status = NV_OK;
++    NvU64 dma_addr;
++
++#if PAGE_SIZE > 4096
++    if (allow_subpage) {
++        status = phys_mem_allocate_sysmem_subpage(tree, size, out);
++        if (status != NV_ERR_NOT_SUPPORTED)
++            return status;
++        status = NV_OK;
++    }
++#else
++    (void)allow_subpage;
++#endif
++
++    out->handle.page = phys_mem_alloc_sysmem_pages(tree, get_order(size));
+     if (out->handle.page == NULL)
+         return NV_ERR_NO_MEMORY;
+ 
+@@ -204,6 +402,7 @@
+                                    NvLength size,
+                                    uvm_aperture_t location,
+                                    uvm_pmm_alloc_flags_t pmm_flags,
++                                   bool allow_subpage,
+                                    uvm_mmu_page_table_alloc_t *out)
+ {
+     UVM_ASSERT((location == UVM_APERTURE_VID) || (location == UVM_APERTURE_SYS));
+@@ -211,7 +410,7 @@
+     memset(out, 0, sizeof(*out));
+ 
+     if (location == UVM_APERTURE_SYS)
+-        return phys_mem_allocate_sysmem(tree, size, out);
++        return phys_mem_allocate_sysmem(tree, size, allow_subpage, out);
+     else
+         return phys_mem_allocate_vidmem(tree, size, pmm_flags, out);
+ }
+@@ -237,6 +436,45 @@
+         UVM_ASSERT(status == uvm_global_get_status());
+ 
+     UVM_ASSERT(ptr->addr.aperture == UVM_APERTURE_SYS);
++
++#if PAGE_SIZE > 4096
++    if (ptr->subpage_slab != NULL) {
++        uvm_pt_subpage_slab_t *slab = ptr->subpage_slab;
++        uvm_pt_subpage_slab_t *free_slab = NULL;
++        NvU16 slot = ptr->subpage_slot;
++        unsigned long bit = 1UL << slot;
++        bool was_full;
++
++        UVM_ASSERT(slot < UVM_PT_SUBPAGE_SLOTS);
++        UVM_ASSERT(ptr->handle.page == slab->page);
++        UVM_ASSERT(ptr->addr.address == slab->dma_addr + ((NvU64)slot * UVM_PT_SUBPAGE_SIZE));
++
++        spin_lock(&tree->pt_subpage_pool.lock);
++        UVM_ASSERT((slab->used_mask & bit) != 0);
++        was_full = (slab->used_mask == UVM_PT_SUBPAGE_FULL_MASK);
++        slab->used_mask &= ~bit;
++        if (slab->used_mask == 0) {
++            list_del(&slab->node);
++            free_slab = slab;
++        }
++        else if (was_full) {
++            list_move(&slab->node, &tree->pt_subpage_pool.partial_slabs);
++        }
++        spin_unlock(&tree->pt_subpage_pool.lock);
++
++        atomic64_dec(&g_uvm_pt_subpage_active_slots);
++
++        if (free_slab != NULL) {
++            if (free_slab->dma_mapped)
++                uvm_parent_gpu_unmap_cpu_pages(tree->gpu->parent, free_slab->dma_addr, PAGE_SIZE);
++            __free_pages(free_slab->page, 0);
++            kfree(free_slab);
++            atomic64_dec(&g_uvm_pt_subpage_active_slabs);
++        }
++        return;
++    }
++#endif
++
+     if (tree->gpu->parent->pci_dev)
+         uvm_parent_gpu_unmap_cpu_pages(tree->gpu->parent, ptr->addr.address, UVM_PAGE_ALIGN_UP(ptr->size));
+     __free_pages(ptr->handle.page, get_order(ptr->size));
+@@ -534,7 +772,8 @@
+     if (dir == NULL)
+         return NULL;
+ 
+-    status = phys_mem_allocate(tree, phys_alloc_size, tree->location, pmm_flags, &dir->phys_alloc);
++    // Root PDB (depth == 0) retains a dedicated host page because RM registers it via page_to_phys(handle.page).
++    status = phys_mem_allocate(tree, phys_alloc_size, tree->location, pmm_flags, depth > 0, &dir->phys_alloc);
+ 
+     // Fall back to sysmem if allocating page tables in vidmem with eviction
+     // fails, and the fallback is allowed.
+@@ -542,7 +781,7 @@
+         (tree->location == UVM_APERTURE_VID) &&
+         (tree->location_sys_fallback) &&
+         ((pmm_flags & UVM_PMM_ALLOC_FLAGS_EVICT) != 0)) {
+-        status = phys_mem_allocate(tree, phys_alloc_size, UVM_APERTURE_SYS, pmm_flags, &dir->phys_alloc);
++        status = phys_mem_allocate(tree, phys_alloc_size, UVM_APERTURE_SYS, pmm_flags, depth > 0, &dir->phys_alloc);
+     }
+ 
+     if (status != NV_OK) {
+@@ -864,7 +1103,7 @@
+     NvU32 depth = tree->hal->page_table_depth(page_size);
+     NvLength alloc_size = tree->hal->allocation_size(depth, page_size);
+ 
+-    return phys_mem_allocate(tree, alloc_size, tree->location, UVM_PMM_ALLOC_FLAGS_EVICT, out);
++    return phys_mem_allocate(tree, alloc_size, tree->location, UVM_PMM_ALLOC_FLAGS_EVICT, true, out);
+ }
+ 
+ static bool page_tree_ats_init_required(uvm_page_tree_t *tree)
+@@ -1127,6 +1366,11 @@
+     UVM_ASSERT(type < UVM_PAGE_TREE_TYPE_COUNT);
+ 
+     memset(tree, 0, sizeof(*tree));
++#if PAGE_SIZE > 4096
++    spin_lock_init(&tree->pt_subpage_pool.lock);
++    INIT_LIST_HEAD(&tree->pt_subpage_pool.partial_slabs);
++    INIT_LIST_HEAD(&tree->pt_subpage_pool.full_slabs);
++#endif
+     uvm_mutex_init(&tree->lock, UVM_LOCK_ORDER_PAGE_TREE);
+     tree->hal = gpu->parent->arch_hal->mmu_mode_hal(big_page_size);
+     UVM_ASSERT(tree->hal != NULL);
+@@ -1222,6 +1466,11 @@
+     if (tree->gpu->parent->map_remap_larger_page_promotion)
+         map_remap_deinit(tree);
+ 
++#if PAGE_SIZE > 4096
++    UVM_ASSERT(list_empty(&tree->pt_subpage_pool.partial_slabs));
++    UVM_ASSERT(list_empty(&tree->pt_subpage_pool.full_slabs));
++#endif
++
+     uvm_mutex_unlock(&tree->lock);
+ 
+     uvm_tracker_deinit(&tree->tracker);

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ernie-5.5-dgx-spark"
-version = "0.5.0"
-description = "All-in-one 2x-4x NVIDIA DGX Spark (GB10, SM12.1) 1M-context runtime, custom SM12.1 kernels, 200GbE auto-discovery & CLI for ERNIE 5.5 Flash Preview MXFP4"
+version = "0.6.0"
+description = "All-in-one 2x-4x NVIDIA DGX Spark (GB10, SM12.1) 1M-context runtime, custom SM12.1 kernels, 200GbE auto-discovery & CLI for ERNIE 5.5 Flash Preview (MXFP4 & W4A16_NVFP4)"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"

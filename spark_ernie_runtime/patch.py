@@ -1269,6 +1269,7 @@ def _patch_fc2_latent_tp() -> bool:
         _log("skip fc2_latent_tp (SPARK_REPLICATE_SHARED_EXPERTS=1 disables shared_experts AR)")
         return False
     try:
+        import torch
         from vllm.distributed import (
             get_tensor_model_parallel_rank,
             get_tensor_model_parallel_world_size,
@@ -1289,7 +1290,13 @@ def _patch_fc2_latent_tp() -> bool:
         orig_moe_init(self, config, quant_config=quant_config, prefix=prefix, aux_stream=aux_stream)
         tp = get_tensor_model_parallel_world_size()
         latent_size = config.moe_latent_size
-        if tp > 1 and latent_size % (tp * 128) == 0:
+        orig_w = getattr(self.fc2_latent_proj, "weight", None)
+        if (
+            tp > 1
+            and latent_size % (tp * 128) == 0
+            and orig_w is not None
+            and orig_w.dtype == torch.float8_e4m3fn
+        ):
             xform = getattr(self.experts, "routed_output_transform", None)
             if xform is not None:
                 self.fc2_latent_proj = RowParallelLinear(
@@ -1445,6 +1452,7 @@ def _patch_hca_oproj_fused() -> bool:
             sigmoid_mul_inplace,
             supports_vha_triton,
             vha_u_proj,
+            vha_v_add_inv_rope_bf16,
             vha_v_add_inv_rope_fp8_quant,
         )
     except Exception as exc:
@@ -1490,34 +1498,55 @@ def _patch_hca_oproj_fused() -> bool:
     ) -> torch.Tensor:
         tc = o_chunk.shape[0]
         wo_a = attn.wo_a
-        ws = wo_a.weight_scale if hasattr(wo_a, "weight_scale") else wo_a.weight_scale_inv
+        use_fp8 = wo_a.weight.dtype == torch.float8_e4m3fn
         n_groups = attn.n_local_groups
         o_rank = attn.o_lora_rank
         z_out = torch.empty((tc, n_groups, o_rank), device=o_chunk.device, dtype=torch.bfloat16)
 
-        # Tile into L2-resident sub-chunks (1024 tokens) when tc > tile_t to avoid the T=8192 fp8_einsum cliff!
-        step = tile_t if (tc > tile_t and not torch.cuda.is_current_stream_capturing()) else tc
-        for s in range(0, tc, step):
-            e = min(s + step, tc)
-            sub_t = e - s
-            aligned = get_tma_aligned_size(sub_t, 4)
-            oq, os_ = vha_v_add_inv_rope_fp8_quant(
-                o_chunk[s:e],
-                z_chunk[s:e],
+        if use_fp8:
+            ws = wo_a.weight_scale if hasattr(wo_a, "weight_scale") else wo_a.weight_scale_inv
+            # Tile into L2-resident sub-chunks (1024 tokens) when tc > tile_t to avoid the T=8192 fp8_einsum cliff!
+            step = tile_t if (tc > tile_t and not torch.cuda.is_current_stream_capturing()) else tc
+            for s in range(0, tc, step):
+                e = min(s + step, tc)
+                sub_t = e - s
+                aligned = get_tma_aligned_size(sub_t, 4)
+                oq, os_ = vha_v_add_inv_rope_fp8_quant(
+                    o_chunk[s:e],
+                    z_chunk[s:e],
+                    v_bf16,
+                    pos_chunk[s:e],
+                    attn.rotary_emb.cos_sin_cache,
+                    n_groups=n_groups,
+                    nope_dim=attn.nope_head_dim,
+                    rope_dim=attn.rope_head_dim,
+                    tma_aligned_size=aligned,
+                )
+                fp8_einsum(
+                    "bhr,hdr->bhd",
+                    (oq, os_),
+                    (wo_a.weight, ws),
+                    z_out[s:e],
+                    recipe=attn._einsum_recipe,
+                )
+        else:
+            # BF16 wo_a path (e.g. W4A16_NVFP4 with lossless BF16 attention):
+            # Fused VHA V-mix + invRoPE -> group-major [G, T, HPG*D] BF16 + cuBLAS bmm
+            o_bf16 = vha_v_add_inv_rope_bf16(
+                o_chunk,
+                z_chunk,
                 v_bf16,
-                pos_chunk[s:e],
+                pos_chunk,
                 attn.rotary_emb.cos_sin_cache,
                 n_groups=n_groups,
                 nope_dim=attn.nope_head_dim,
                 rope_dim=attn.rope_head_dim,
-                tma_aligned_size=aligned,
             )
-            fp8_einsum(
-                "bhr,hdr->bhd",
-                (oq, os_),
-                (wo_a.weight, ws),
-                z_out[s:e],
-                recipe=attn._einsum_recipe,
+            grouped_w = wo_a.weight.view(n_groups, o_rank, -1)
+            torch.bmm(
+                o_bf16,
+                grouped_w.transpose(1, 2),
+                out=z_out.transpose(0, 1),
             )
 
         z_flat = z_out.view(tc, n_groups * o_rank)
@@ -1533,13 +1562,19 @@ def _patch_hca_oproj_fused() -> bool:
     orig_hca_fwd = eattn.Ernie5_5HCAAttentionMixin.forward
 
     def _patched_hca_fwd(self, positions, hidden_states, llama_4_scaling=None):
+        wo_dtype = self.wo_a.weight.dtype
         can_fuse = (
             self.vha.tp_size > 1
             and not self._fuse_vha_quant
             and self._fused_wo_b is None
-            and self.wo_a.weight.dtype == torch.float8_e4m3fn
-            and self._tma_aligned_scales
-            and self._einsum_recipe[2] == 128
+            and (
+                (
+                    wo_dtype == torch.float8_e4m3fn
+                    and self._tma_aligned_scales
+                    and self._einsum_recipe[2] == 128
+                )
+                or wo_dtype == torch.bfloat16
+            )
             and self.head_dim == 512
             and self.nope_head_dim == 448
             and self.rope_head_dim == 64
@@ -2280,6 +2315,48 @@ def _patch_anthropic_and_api_compat() -> bool:
     return patched_any
 
 
+def _patch_nvfp4_w4a16_compat() -> bool:
+    """Allow ModelOpt W4A16_NVFP4 hf_quant_config.json checkpoints on vLLM 0.32.0.
+
+    vLLM 0.32.0's `ModelOptNvFp4Config` natively supports `W4A16_NVFP4`, but
+    `ModelArchConfigConvertorBase._normalize_quantization_config` only allowlists
+    `NVFP4` when `producer.name == "modelopt"`, raising `ValueError: Unknown ModelOpt
+    quant algo: W4A16_NVFP4`. This patch accepts `W4A16_NVFP4` cleanly -> `modelopt_fp4`.
+    """
+    try:
+        from vllm.transformers_utils import model_arch_config_convertor as macc  # type: ignore
+    except Exception:
+        return False
+
+    base_cls = getattr(macc, "ModelArchConfigConvertorBase", None)
+    if base_cls is None or getattr(base_cls, "_spark_w4a16_nvfp4_patched", False):
+        return False
+
+    orig_norm = base_cls._normalize_quantization_config
+
+    def _patched_norm(self, config):
+        qcfg = getattr(config, "quantization_config", None)
+        if isinstance(qcfg, dict):
+            prod = qcfg.get("producer", {})
+            qinner = qcfg.get("quantization", {})
+            if (
+                isinstance(prod, dict)
+                and prod.get("name") == "modelopt"
+                and isinstance(qinner, dict)
+                and str(qinner.get("quant_algo", "")).upper() == "W4A16_NVFP4"
+            ):
+                qcfg = dict(qcfg)
+                qcfg["quant_method"] = "modelopt_fp4"
+                qcfg.pop("producer", None)
+                config.quantization_config = qcfg
+        return orig_norm(self, config)
+
+    base_cls._normalize_quantization_config = _patched_norm
+    base_cls._spark_w4a16_nvfp4_patched = True
+    _log("installed ModelOpt W4A16_NVFP4 config loader compat (hf_quant_config.json -> modelopt_fp4)")
+    return True
+
+
 def install() -> dict[str, bool]:
     global _INSTALLED
     if _INSTALLED:
@@ -2331,6 +2408,8 @@ def install() -> dict[str, bool]:
         applied["gb10_uma_fadvise"] = _patch_gb10_uma_fadvise()
     if _env_flag("SPARK_PATCH_ANTHROPIC_COMPAT", "1"):
         applied["anthropic_api_compat"] = _patch_anthropic_and_api_compat()
+    if _env_flag("SPARK_PATCH_NVFP4_COMPAT", "1"):
+        applied["nvfp4_w4a16_compat"] = _patch_nvfp4_w4a16_compat()
     if _env_flag("SPARK_PROFILE_PREFILL", "0"):
         applied["profile_prefill"] = _patch_profile_prefill()
 

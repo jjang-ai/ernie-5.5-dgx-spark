@@ -239,6 +239,106 @@ def vha_v_add_inv_rope_fp8_quant(
 
 
 @triton.jit
+def _vha_v_add_inv_rope_bf16_kernel(
+    o_ptr,
+    z_ptr,
+    v_ptr,
+    pos_ptr,
+    cs_ptr,
+    out_ptr,
+    num_tokens,
+    o_stride_tok,
+    o_stride_h,
+    z_stride_tok,
+    z_stride_r,
+    cs_stride_pos,
+    out_stride_g,
+    H: tl.constexpr,
+    R: tl.constexpr,
+    HPG: tl.constexpr,
+    HEAD_DIM: tl.constexpr,
+    NOPE_DIM: tl.constexpr,
+    HALF_ROPE: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
+    """Fused TP>1 VHA V-mix + residual add + inverse RoPE -> group-major BF16 [G, T, HPG*D]."""
+    tok = tl.program_id(0).to(tl.int64)
+    if tok >= num_tokens:
+        return
+    chunk = tl.program_id(1)
+    heads = tl.arange(0, H)
+    ranks = tl.arange(0, R)
+    group = heads // HPG
+    hig = heads % HPG
+    cols = chunk * BLOCK + tl.arange(0, BLOCK)
+
+    v = tl.load(v_ptr + heads[:, None] * R + ranks[None, :])
+    z = tl.load(z_ptr + tok * z_stride_tok + ranks[:, None] * z_stride_r + cols[None, :])
+    o = tl.load(o_ptr + tok * o_stride_tok + heads[:, None] * o_stride_h + cols[None, :]).to(
+        tl.float32
+    )
+    # Match BF16 rounding of o_mixed = (o + V @ z).to(bf16) before inverse RoPE
+    y = (tl.dot(v, z, out_dtype=tl.float32) + o).to(tl.bfloat16).to(tl.float32)
+    if chunk * BLOCK + BLOCK > NOPE_DIM:
+        rope = chunk * (BLOCK // 2) + tl.arange(0, BLOCK // 2) - NOPE_DIM // 2
+        is_rope = rope >= 0
+        pos = tl.load(pos_ptr + tok)
+        cs = cs_ptr + pos * cs_stride_pos + tl.maximum(rope, 0)
+        cos = tl.load(cs, mask=is_rope, other=1.0)[None, :]
+        sin = tl.load(cs + HALF_ROPE, mask=is_rope, other=0.0)[None, :]
+        y_even, y_odd = tl.split(tl.reshape(y, (H, BLOCK // 2, 2)))
+        y = tl.reshape(
+            tl.join(y_even * cos + y_odd * sin, y_odd * cos - y_even * sin),
+            (H, BLOCK),
+        )
+    out_rows = out_ptr + group * out_stride_g + tok * (HPG * HEAD_DIM) + hig * HEAD_DIM
+    tl.store(out_rows[:, None] + cols[None, :], y.to(tl.bfloat16))
+
+
+def vha_v_add_inv_rope_bf16(
+    o: torch.Tensor,
+    z: torch.Tensor,
+    v_bf16: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    n_groups: int,
+    nope_dim: int = 448,
+    rope_dim: int = 64,
+) -> torch.Tensor:
+    """Fused o_mixed=o+V@z -> inv_rope -> group-major [n_groups, T, HPG*D] BF16 for BF16 wo_a."""
+    T, H, D = o.shape
+    R = v_bf16.shape[1]
+    block = 128
+    hpg = H // n_groups
+    out = torch.empty((n_groups, T, hpg * D), dtype=torch.bfloat16, device=o.device)
+    if T > 0:
+        _vha_v_add_inv_rope_bf16_kernel[(T, D // block)](
+            o,
+            z,
+            v_bf16,
+            positions,
+            cos_sin_cache,
+            out,
+            T,
+            o.stride(0),
+            o.stride(1),
+            z.stride(0),
+            z.stride(1),
+            cos_sin_cache.stride(0),
+            out.stride(0),
+            H=H,
+            R=R,
+            HPG=hpg,
+            HEAD_DIM=D,
+            NOPE_DIM=nope_dim,
+            HALF_ROPE=rope_dim // 2,
+            BLOCK=block,
+            num_warps=4,
+        )
+    return out
+
+
+@triton.jit
 def _sigmoid_mul_inplace_kernel(z_ptr, g_ptr, N, BLOCK: tl.constexpr):
     pid = tl.program_id(0).to(tl.int64)
     offs = pid * BLOCK + tl.arange(0, BLOCK)

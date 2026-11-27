@@ -1,4 +1,4 @@
-"""All-in-one CLI for ERNIE 5.5 Flash Preview MXFP4 on 2x-4x NVIDIA DGX Spark (GB10, SM12.1)."""
+"""All-in-one CLI for ERNIE 5.5 Flash Preview (MXFP4 & NVFP4) on 2x-4x NVIDIA DGX Spark (GB10, SM12.1)."""
 from __future__ import annotations
 
 import argparse
@@ -152,8 +152,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     cfg = load_config()
     cluster = load_cluster()
     world_size = cluster["world_size"] if cluster else (4 if args.profile.startswith("4x") else 2)
+    target_model = args.model or cfg["model"]
     prof_name, prof = resolve_profile(
-        args.profile, world_size, cluster.get("topology", "") if cluster else ""
+        args.profile,
+        world_size,
+        cluster.get("topology", "") if cluster else "",
+        model_path=target_model,
     )
     mode = prof.pop("mode")
 
@@ -337,7 +341,7 @@ def cmd_profiles(_: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="spark-ernie",
-        description="All-in-one 2x-4x NVIDIA DGX Spark (GB10, SM12.1) 1M-context runtime & CLI for ERNIE 5.5 Flash Preview MXFP4",
+        description="All-in-one 2x-4x NVIDIA DGX Spark (GB10, SM12.1) 1M-context runtime & CLI for ERNIE 5.5 Flash Preview (MXFP4 & NVFP4)",
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Portable DGX Spark (GB10, SM12.1) launcher for ERNIE 5.5 Flash Preview MXFP4.
+# Portable DGX Spark (GB10, SM12.1) launcher for ERNIE 5.5 Flash Preview (MXFP4 & W4A16_NVFP4).
 # Works out of the box with `spark-ernie discover` + `spark-ernie start` (zero hardcoded paths/IPs).
 #
 # Usage:
@@ -109,8 +109,22 @@ export SPARK_PACKED_BF16_LM_HEAD="${SPARK_PACKED_BF16_LM_HEAD:-1}"
 export SPARK_PACKED_BF16_MARKOV="${SPARK_PACKED_BF16_MARKOV:-1}"
 export SPARK_PATCH_DSPARK_PAD_MASK="${SPARK_PATCH_DSPARK_PAD_MASK:-1}"
 export SPARK_PATCH_VHA_BF16_AR="${SPARK_PATCH_VHA_BF16_AR:-1}"
+# Auto-detect W4A16_NVFP4 / NVFP4 checkpoints so direct invocations get optimal SM12.1 defaults
+IS_NVFP4=0
+if [ -d "$MODEL" ]; then
+    if grep -qE "modelopt_fp4|NVFP4" "$MODEL/config.json" "$MODEL/hf_quant_config.json" 2>/dev/null; then
+        IS_NVFP4=1
+    fi
+elif [[ "${MODEL,,}" == *nvfp4* ]]; then
+    IS_NVFP4=1
+fi
+
 export SPARK_PATCH_VHA_TRITON="${SPARK_PATCH_VHA_TRITON:-1}"
-export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-1}"
+if [ "$IS_NVFP4" = "1" ]; then
+    export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-0}"
+else
+    export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-1}"
+fi
 export SPARK_PATCH_FC1_LATENT_TP="${SPARK_PATCH_FC1_LATENT_TP:-0}"
 export SPARK_PATCH_GATE_BF16X2="${SPARK_PATCH_GATE_BF16X2:-1}"
 export SPARK_PATCH_HCA_OPROJ_FUSED="${SPARK_PATCH_HCA_OPROJ_FUSED:-1}"
@@ -122,11 +136,16 @@ export SPARK_DSPARK_TOP_P="${SPARK_DSPARK_TOP_P:-0.0}"
 export VLLM_MOE_SKIP_PADDING="${VLLM_MOE_SKIP_PADDING:-1}"
 export PYTHONPATH="$REPO_ROOT/spark_ernie_runtime:$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
-# Humming MXFP4 MoE (indexed GEMM) + HummingFP8 safe selective linears -> 219-242 GB/s!
-export VLLM_HUMMING_MOE_GEMM_TYPE="${VLLM_HUMMING_MOE_GEMM_TYPE:-indexed}"
+if [ "$IS_NVFP4" = "1" ]; then
+    export VLLM_HUMMING_MOE_GEMM_TYPE="${VLLM_HUMMING_MOE_GEMM_TYPE:-indexed}"
+    MOE_BACKEND="${SPARK_MOE_BACKEND:-marlin}"
+else
+    # Humming MXFP4 MoE (indexed GEMM) + HummingFP8 safe selective linears -> 219-242 GB/s!
+    export VLLM_HUMMING_MOE_GEMM_TYPE="${VLLM_HUMMING_MOE_GEMM_TYPE:-indexed}"
+    MOE_BACKEND="${SPARK_MOE_BACKEND:-humming}"
+fi
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 
-MOE_BACKEND="${SPARK_MOE_BACKEND:-humming}"
 LINEAR_BACKEND="${SPARK_LINEAR_BACKEND:-humming}"
 CG_MODE="${SPARK_CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
 SERVED_NAME="${SPARK_SERVED_MODEL_NAME:-ernie55}"

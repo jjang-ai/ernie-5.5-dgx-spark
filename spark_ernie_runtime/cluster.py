@@ -199,6 +199,106 @@ PROFILES: dict[str, dict[str, str]] = {
         "SPARK_MAX_NUM_BATCHED_TOKENS": "2048",
         "SPARK_GPU_MEM_UTIL": "0.75",
     },
+    # W4A16_NVFP4 + lossless BF16 attention profiles (~170 GiB total: ~87.9 GiB/Spark on 2x, ~45 GiB/Spark on 4x)
+    "2x-nvfp4-512k-fast": {
+        "mode": "tp2-dspark",
+        "SPARK_MOE_BACKEND": "marlin",
+        "SPARK_USE_SPARKNET": "1",
+        "SPARK_REPLICATE_SHARED_EXPERTS": "0",
+        "SPARK_DSPARK_VOCAB_PARALLEL": "1",
+        "SPARK_DSPARK_VP_PROB": "1",
+        "SPARK_DSPARK_DRAFT_TAU": "1.0",
+        "SPARK_DSPARK_SAMPLE_METHOD": "probabilistic",
+        "SPARK_DSPARK_MAIN_PROJ_TP": "1",
+        "SPARK_DSPARK_NUM_TOKENS": "7",
+        "SPARK_DSPARK_ADAPTIVE": "1",
+        "SPARK_DSPARK_VERIFY_RULE": "marginal",
+        "SPARK_DSPARK_MOE_COST_CURVE": "1",
+        "SPARK_PATCH_KV_PACK": "1",
+        "SPARK_KV_PACK_MAX_DSA_SPLITS": "2",
+        "SPARK_PACKED_BF16_LM_HEAD": "1",
+        "SPARK_PACKED_BF16_MARKOV": "1",
+        "SPARK_PATCH_DSPARK_PAD_MASK": "1",
+        "SPARK_PATCH_VHA_BF16_AR": "1",
+        "SPARK_PATCH_VHA_TRITON": "1",
+        "SPARK_PATCH_FC2_LATENT_TP": "0",
+        "SPARK_PATCH_GATE_BF16X2": "1",
+        "SPARK_PATCH_HCA_OPROJ_FUSED": "1",
+        "SPARK_HCA_PIPELINE": "1",
+        "SPARK_ENABLE_PREFIX_CACHING": "1",
+        "SPARK_MAX_NUM_SEQS": "8",
+        "SPARK_MAX_MODEL_LEN": "524288",
+        "SPARK_MAX_NUM_BATCHED_TOKENS": "2048",
+        "SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE": "32",
+        "SPARK_KV_CACHE_MEMORY_BYTES": "5368709120",
+        "SPARK_GPU_MEM_UTIL": "0.82",
+        "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": "0",
+    },
+    "4x-nvfp4-1m-fast": {
+        "mode": "tp4-dspark",
+        "SPARK_MOE_BACKEND": "marlin",
+        "SPARK_USE_SPARKNET": "1",
+        "SPARK_REPLICATE_SHARED_EXPERTS": "0",
+        "SPARK_DSPARK_VOCAB_PARALLEL": "1",
+        "SPARK_DSPARK_VP_PROB": "1",
+        "SPARK_DSPARK_DRAFT_TAU": "1.0",
+        "SPARK_DSPARK_SAMPLE_METHOD": "probabilistic",
+        "SPARK_DSPARK_MAIN_PROJ_TP": "1",
+        "SPARK_DSPARK_NUM_TOKENS": "7",
+        "SPARK_DSPARK_ADAPTIVE": "1",
+        "SPARK_DSPARK_VERIFY_RULE": "marginal",
+        "SPARK_DSPARK_MOE_COST_CURVE": "1",
+        "SPARK_PATCH_KV_PACK": "1",
+        "SPARK_KV_PACK_MAX_DSA_SPLITS": "2",
+        "SPARK_PACKED_BF16_LM_HEAD": "1",
+        "SPARK_PACKED_BF16_MARKOV": "1",
+        "SPARK_PATCH_DSPARK_PAD_MASK": "1",
+        "SPARK_PATCH_VHA_BF16_AR": "1",
+        "SPARK_PATCH_VHA_TRITON": "1",
+        "SPARK_PATCH_FC2_LATENT_TP": "0",
+        "SPARK_PATCH_GATE_BF16X2": "1",
+        "SPARK_PATCH_HCA_OPROJ_FUSED": "1",
+        "SPARK_HCA_PIPELINE": "1",
+        "SPARK_ENABLE_PREFIX_CACHING": "1",
+        "SPARK_MAX_NUM_SEQS": "32",
+        "SPARK_MAX_MODEL_LEN": "1048576",
+        "SPARK_MAX_NUM_BATCHED_TOKENS": "8192",
+        "SPARK_GPU_MEM_UTIL": "0.72",
+    },
+    "4x-dual-tp2-nvfp4-fast": {
+        "mode": "dual-tp2-dspark",
+        "SPARK_MOE_BACKEND": "marlin",
+        "SPARK_USE_SPARKNET": "1",
+        "SPARK_REPLICATE_SHARED_EXPERTS": "0",
+        "SPARK_DSPARK_VOCAB_PARALLEL": "1",
+        "SPARK_DSPARK_VP_PROB": "1",
+        "SPARK_DSPARK_DRAFT_TAU": "1.0",
+        "SPARK_DSPARK_SAMPLE_METHOD": "probabilistic",
+        "SPARK_DSPARK_MAIN_PROJ_TP": "1",
+        "SPARK_DSPARK_NUM_TOKENS": "7",
+        "SPARK_DSPARK_ADAPTIVE": "1",
+        "SPARK_DSPARK_VERIFY_RULE": "marginal",
+        "SPARK_DSPARK_MOE_COST_CURVE": "1",
+        "SPARK_PATCH_KV_PACK": "1",
+        "SPARK_KV_PACK_MAX_DSA_SPLITS": "2",
+        "SPARK_PACKED_BF16_LM_HEAD": "1",
+        "SPARK_PACKED_BF16_MARKOV": "1",
+        "SPARK_PATCH_DSPARK_PAD_MASK": "1",
+        "SPARK_PATCH_VHA_BF16_AR": "1",
+        "SPARK_PATCH_VHA_TRITON": "1",
+        "SPARK_PATCH_FC2_LATENT_TP": "0",
+        "SPARK_PATCH_GATE_BF16X2": "1",
+        "SPARK_PATCH_HCA_OPROJ_FUSED": "1",
+        "SPARK_HCA_PIPELINE": "1",
+        "SPARK_ENABLE_PREFIX_CACHING": "1",
+        "SPARK_MAX_NUM_SEQS": "8",
+        "SPARK_MAX_MODEL_LEN": "524288",
+        "SPARK_MAX_NUM_BATCHED_TOKENS": "2048",
+        "SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE": "32",
+        "SPARK_KV_CACHE_MEMORY_BYTES": "5368709120",
+        "SPARK_GPU_MEM_UTIL": "0.82",
+        "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": "0",
+    },
 }
 
 # Friendly aliases
@@ -211,15 +311,45 @@ PROFILE_ALIASES: dict[str, str] = {
     "2x2-max-batch": "4x-dual-tp2-max-batch",
     "4x-2x2-fast": "4x-dual-tp2-fast",
     "4x-2x2-max-batch": "4x-dual-tp2-max-batch",
+    "2x-nvfp4": "2x-nvfp4-512k-fast",
+    "4x-nvfp4": "4x-nvfp4-1m-fast",
+    "2x2-nvfp4": "4x-dual-tp2-nvfp4-fast",
 }
 
 
-def resolve_profile(name: str, world_size: int, topology: str = "") -> tuple[str, dict[str, str]]:
+def is_nvfp4_model(model_path: str | None) -> bool:
+    """Detect W4A16_NVFP4 / NVFP4 checkpoints from config.json, hf_quant_config.json, or repo name."""
+    if not model_path:
+        return False
+    p = Path(model_path)
+    if p.is_dir():
+        for fname in ("config.json", "hf_quant_config.json"):
+            fpath = p / fname
+            if fpath.is_file():
+                try:
+                    raw = fpath.read_text(encoding="utf-8", errors="ignore")
+                    if "modelopt_fp4" in raw or "NVFP4" in raw:
+                        return True
+                except OSError:
+                    pass
+    return "nvfp4" in model_path.lower()
+
+
+def resolve_profile(
+    name: str,
+    world_size: int,
+    topology: str = "",
+    model_path: str | None = None,
+) -> tuple[str, dict[str, str]]:
     if not name or name == "auto":
+        nvfp4 = is_nvfp4_model(model_path)
         if world_size == 4:
-            name = "4x-dual-tp2-fast" if topology == "dual_direct" else "4x-1m-fast"
+            if nvfp4:
+                name = "4x-dual-tp2-nvfp4-fast" if topology == "dual_direct" else "4x-nvfp4-1m-fast"
+            else:
+                name = "4x-dual-tp2-fast" if topology == "dual_direct" else "4x-1m-fast"
         else:
-            name = "2x-1m-fast"
+            name = "2x-nvfp4-512k-fast" if nvfp4 else "2x-1m-fast"
     name = PROFILE_ALIASES.get(name, name)
     if name not in PROFILES:
         raise ValueError(f"Unknown profile {name!r}. Valid profiles: {sorted(PROFILES)}")
@@ -364,11 +494,14 @@ def start_cluster(
         raise ValueError(f"Requested --nodes {nodes_limit}, but cluster.json has {cluster['world_size']} nodes.")
 
     world_size = cluster["world_size"]
+    model_path = model or cfg["model"]
     prof_name, prof_env = resolve_profile(
-        profile or cfg.get("profile", "auto"), world_size, cluster.get("topology", "")
+        profile or cfg.get("profile", "auto"),
+        world_size,
+        cluster.get("topology", ""),
+        model_path=model_path,
     )
     mode = prof_env.pop("mode")
-    model_path = model or cfg["model"]
     srv_port = int(port or cfg.get("port", 8000))
     mport = int(master_port or cfg.get("master_port", 29801))
     ssh_user = cluster.get("ssh_user", "")

@@ -1,8 +1,10 @@
 # `ernie-5.5-dgx-spark`
 
-**All-in-one, switchless 2×–4× NVIDIA DGX Spark (`GB10`, `SM12.1`) 1M-context runtime, custom SM12.1 kernels, automatic 200GbE QSFP cable discovery, prefix-aware `2×2` parallelized router, and OpenAI Chat + Responses + Anthropic `/v1/messages` CLI for [`ERNIE-5.5-Flash-Preview`](https://huggingface.co/dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4) MXFP4 on vLLM.**
+**All-in-one, switchless 2×–4× NVIDIA DGX Spark (`GB10`, `SM12.1`) 1M-context runtime, custom SM12.1 kernels, automatic 200GbE QSFP cable discovery, prefix-aware `2×2` parallelized router, and OpenAI Chat + Responses + Anthropic `/v1/messages` CLI for [`ERNIE-5.5-Flash-Preview`](https://huggingface.co/dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4) (`MXFP4` & `W4A16_NVFP4`) on vLLM.**
 
-- **Official Uncensored Model (Hugging Face):** **[`dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4`](https://huggingface.co/dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4)** — optional one-command download & parallel 200GbE cluster fan-out built right into `./install.sh --download-model` and `spark-ernie download`!
+- **Supported Quantization Formats (Auto-Detected via `--profile auto`):**
+  - **MXFP4 + FP8 Attention** (`~155 GiB`, e.g. [`dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4`](https://huggingface.co/dealignai/ERNIE-5.5-Flash-Preview-UNCENSORED-MXFP4)) — fastest single-stream & `1M`-context on both `2×` and `4×` Sparks via Humming MXFP4 Indexed MoE (`242 GB/s`).
+  - **W4A16 NVFP4 + Lossless BF16 Attention** (`~170 GiB`, `ModelOpt W4A16_NVFP4` group-16 FP8 scales + lossless BF16 non-experts) — full `2×` (`512K` ctx, `563,470` KV tokens, `2x-nvfp4-512k-fast`), `2×2` (`4x-dual-tp2-nvfp4-fast`), and `4×` (`1M` ctx, `4x-nvfp4-1m-fast`) support with Marlin & Humming NVFP4 MoE backends, bit-exact fused BF16 HCA Triton kernel (`3.34×` decode / `2.64×` prefill), chunked lossless LM-head packer (`18 GiB → 2.09 GiB` startup peak), and automatic `hf_quant_config.json` loader compatibility!
 - **All Three DGX Spark Topologies Supported Out of the Box (`1,048,576` `1M` Native Context):**
   1. **`2×` Direct (`2x-1m-fast`, `TP=2 + EP=2`):** Full **`1,143,108` KV tokens (`1.09×` `1M`)** with DSpark on just 2 Sparks! **`84.4 tok/s`** easy code `T=1.0` (**`92.8 tok/s`** greedy), **`56.0 avg / 69.7 peak`** on 8-turn `T=1.0, reasoning=high` coding (`0/8` loops), **`42.6–43.5 tok/s`** prose, **`74.5 tok/s`** Chinese math, **`1,930–2,004 tok/s`** 32K cold prefill (**`2.00×` stock**), and **`306.5 tok/s` @ `B=16` code** (**`3.91×` stock `78.4`**)!
   2. **`4×` Switchless Ring (`4x-1m-fast`, `TP=4 + EP=4`):** Lowest single-stream latency, highest concurrency, and **full `1,000,031` (`1M`) context verified live end-to-end (`20/20` start+end needle recall, `0` loops)!** **`127.0 tok/s`** easy code `T=1.0` (**`139.8 tok/s`** greedy — **`6.9×` stock!**), **`79.6 avg / 93.5 peak`** 8-turn `T=1.0, reasoning=high` coding, **`59.2–64.2 tok/s`** prose, **`104.8 tok/s`** Chinese math, **`2,753–2,800 tok/s`** 8K–32K & **`2,469 tok/s`** 100K cold prefill, **`4.99s` warm TTFT & `80.7 tok/s` code / `43.0 tok/s` prose at FULL `1,000,031` (`1M`) tokens**, and **`853.8 tok/s` code / `604.5 tok/s` prose @ `B=64`**!
@@ -87,14 +89,32 @@ Verified **`4/4 PASS`** on **BOTH `4×` Ring AND `2×` Direct** via `benchmarks/
 | **OpenAI `/v1/responses` — Prefix Cache + `off`/`high` Efforts** | `4.65s` -> **`0.352s`** (**`13.2×`**) | `6.55s` -> **`0.422s`** (**`15.5×`**) | **`96.7%`** (`12,544` tok) | Native `input_tokens_details.cached_tokens` populated |
 | **Anthropic `/v1/messages` — `x-api-key`, `thinking=disabled` & `enabled`** | `4.67s` -> **`0.346s`** (`off`, **`13.5×`**) / **`0.381s`** (`high` + reminder, **`12.2×`**!) | `6.55s` -> **`0.414s`** (`off`, **`15.8×`**) / **`0.767s`** (`high` + reminder) | **`96.8%`** (`off`) / **`96.4%`** (`high` + reminder!) | **`81.5–85.6 tok/s`** warm decode; `count_tokens=12,955` |
 
+### 4b. W4A16 NVFP4 + Lossless BF16 Attention (`2×` Direct `2x-nvfp4-512k-fast` vs `2×` MXFP4 `2x-1m-fast`)
+Measured head-to-head on `2×` DGX Spark (`TP=2 + EP=2`, DSpark ON, `SPARK_MOE_BACKEND=marlin`, lossless BF16 attention + fused `vha_v_add_inv_rope_bf16`, **`563,470` KV tokens = `1.07× 512K`** on `2×`, full `1M` on `4×` via `4x-nvfp4-1m-fast`, **`0` loops across all benchmarks**):
+
+| Metric (`2×` DGX Spark, DSpark ON) | `2×` `2x-nvfp4-512k-fast` (`W4A16_NVFP4` + BF16 Attn) | `2×` `2x-1m-fast` (`MXFP4` + FP8 Attn) | Ratio / Notes |
+|---|---:|---:|---|
+| **Weights / Spark** | `87.89 GiB` (`marlin`) / `87.97 GiB` (`humming`) | `79.70 GiB` | Lossless BF16 non-experts (`17.97 GiB` total) |
+| **KV Cache Pool (`2×` / `4×`)** | **`563,470` tok (`512K`)** / **`1M` on `4×`** | `1,143,108` tok (`1M`) | Byte-packed KV (`12` groups) |
+| **`off_code` (`B=1`, SPSC ring)** | **`44.0 tok/s`** | `51.3 tok/s` | `0.86×` |
+| **`off_prose` (`B=1`)** | **`29.1 tok/s`** | `36.8 tok/s` | `0.79×` |
+| **`high_math` / `high_zh` (`B=1`)** | **`42.5` / `58.1 tok/s`** | `58.8` / `77.0 tok/s` | `0.72–0.75×` |
+| **8-Turn Coding (`T=1.0, high`)** | **`44.9 avg / 49.3 pk`** (`8/8 stop, 0/8 loops`) | `56.0 avg / 69.7 pk` | `0.80×` (`turn1_recall=True`) |
+| **Cold Prefill (`8K` / `32K`)** | **`1,505` / `1,768 tok/s`** (`3/3` recall) | `1,971` / `2,004 tok/s` | `0.76–0.88×` |
+| **Warm TTFT (`8K` / `32K`)** | **`0.444s` (`10.3×`) / `0.597s` (`25.9×`)** | `0.380s` / `0.485s` | Full VRAM prefix cache |
+| **Concurrency `B=8` (`T=1.0`, Prose / Code)** | **`114.5` (`15.7`/req) / `143.9` (`19.8`/req)** | `139.3` / `168.3 tok/s` | `0.82–0.85×` (`0` loops) |
+
+*Why `0.80–0.88×` vs MXFP4:* keeping all `17.97 GiB` of non-expert layers in lossless BF16 (vs `~9 GiB` FP8) adds `+3.7 GiB/Spark` of LPDDR5X read per decode step (`~13.5 ms` at `273 GB/s`), shifting the base AR step from `~39 ms` to `51.9 ms` while DSpark acceptance stays identical (`pos0 = 72.4%`, `pos1..6 = 58.7%–69.3%`). All three SM12.1 NVFP4 MoE backends (`marlin`, `humming` indexed, `humming` grouped) are verified `cos >= 0.999991`.
+
 ---
 
-## Recommended Host OS, Kernel & Firmware (Unthrottled 200GbE + Extra Unified RAM)
+## Recommended Host OS, Kernel, Firmware & Optional 64 KiB UVM Slab
 
 Older DGX Spark kernels/firmware throttled ConnectX-7 RoCEv2 links and reserved `3–6 GiB` of extra unified RAM. For best stability and full `1M`-context headroom on `2×` and `4×` Sparks, upgrade all nodes to:
 - **DGX OS:** `7.6.0` (Ubuntu 24.04) with Linux kernel **`7.0.0-1025-nvidia`** and `nvidia-spark-grub-kho` (`kho=off` in `/proc/cmdline` — avoids KHO unified-RAM reservation).
 - **System / GPU Firmware:** `BIOS 5.36_0ACUM028` & `VBIOS 9A.0B.34.00.00` (recovers `+3–6 GiB` unified RAM/Spark).
 - **ConnectX-7 NIC Firmware:** `28.50.1002` with `MTU 9000` on all active 200GbE QSFP ports (verified **`22.67 GB/s`** NCCL busBW = `91%` of `25 GB/s` raw line rate across all 4 Sparks, zero link drops or throttling).
+- **Optional `+1.8 GiB/Spark` Unified-RAM Recovery (`64 KiB` Kernel + `nvidia-uvm` 4 KiB Sub-Page Slab):** Switching to the `7.0.0-*-nvidia-64k` kernel cuts Linux `vmemmap` from `2.00 GiB → 0.125 GiB`, and our clean-room [`tools/uvm_64k_slab/`](tools/uvm_64k_slab/README.md) DKMS patch packs up to `16` non-root `<= 4 KiB` GPU page tables per `64 KiB` backing page (`#if PAGE_SIZE > 4096`) to eliminate stock `64 KiB` UVM page-table fragmentation and reclaim `~1.8 GiB` net usable RAM per Spark!
 
 ---
 
@@ -161,17 +181,21 @@ spark-ernie api-key set my-secret   # Set a custom key
 spark-ernie api-key clear           # Disable auth for trusted local LAN
 ```
 
-### 5. Choose Profiles Anytime (`2× Direct` vs `4× Ring` vs `2×2 Parallelized`)
+### 5. Choose Profiles Anytime (`2× Direct` vs `4× Ring` vs `2×2 Parallelized`, `MXFP4` & `NVFP4`)
 ```bash
-spark-ernie profiles                                   # List all 7 built-in profiles
-spark-ernie restart --profile 4x-1m-fast               # 4x Ring: 1M ctx, 127-140 easy code / 79.6 8-turn, up to 854 tok/s @ B=64
-spark-ernie restart --profile 4x-1m-max-context        # 4x Ring: 1M ctx Pure AR (~5.5x+ concurrent 1M)
-spark-ernie restart --profile 4x-dual-tp2-fast         # 2x2 Parallelized: 2x(TP=2 1M DSpark) + prefix-aware router (:8000)
-spark-ernie restart --profile 4x-dual-tp2-max-batch    # 2x2 Parallelized: 2x(TP=2 128K AR) up to ~930-1,075 tok/s @ B=256
-spark-ernie restart --profile 2x-1m-fast               # 2x Direct: 1M ctx, 84-93 easy code / 56.0 8-turn, 306.5 tok/s @ B=16
-spark-ernie restart --profile 2x-1m-max-context        # 2x Direct: 1M ctx Pure AR (max concurrent 1M on 2x)
-spark-ernie restart --profile 2x-max-batch             # 2x Direct: 128K ctx, up to 537.6 tok/s peak @ B=128
+spark-ernie profiles                                   # List all 10 built-in profiles (MXFP4 + NVFP4)
+spark-ernie restart --profile 4x-1m-fast               # 4x Ring MXFP4: 1M ctx, 127-140 easy code / 79.6 8-turn, up to 854 tok/s @ B=64
+spark-ernie restart --profile 4x-1m-max-context        # 4x Ring MXFP4: 1M ctx Pure AR (~5.5x+ concurrent 1M)
+spark-ernie restart --profile 4x-dual-tp2-fast         # 2x2 MXFP4: 2x(TP=2 1M DSpark) + prefix-aware router (:8000)
+spark-ernie restart --profile 4x-dual-tp2-max-batch    # 2x2 MXFP4: 2x(TP=2 128K AR) up to ~930-1,075 tok/s @ B=256
+spark-ernie restart --profile 2x-1m-fast               # 2x Direct MXFP4: 1M ctx, 84-93 easy code / 56.0 8-turn, 306.5 tok/s @ B=16
+spark-ernie restart --profile 2x-1m-max-context        # 2x Direct MXFP4: 1M ctx Pure AR (max concurrent 1M on 2x)
+spark-ernie restart --profile 2x-max-batch             # 2x Direct MXFP4: 128K ctx, up to 537.6 tok/s peak @ B=128
+spark-ernie restart --profile 2x-nvfp4-512k-fast       # 2x Direct NVFP4 (alias: 2x-nvfp4): 512K ctx (563K KV), Marlin NVFP4 + BF16 attn
+spark-ernie restart --profile 4x-nvfp4-1m-fast         # 4x Ring NVFP4 (alias: 4x-nvfp4): 1M ctx, Marlin NVFP4 + BF16 attn
+spark-ernie restart --profile 4x-dual-tp2-nvfp4-fast   # 2x2 NVFP4 (alias: 2x2-nvfp4): 2x(TP=2 512K DSpark) + prefix-aware router
 ```
+(`--profile auto` automatically selects the matching MXFP4 or NVFP4 profile based on `config.json` / `hf_quant_config.json`!)
 You can also run the zero-dependency prefix-aware load-balancing router standalone against any pair of replicas (supports OpenAI Chat, Responses, and Anthropic `/v1/messages` + `x-api-key`):
 ```bash
 python3 -m spark_ernie_runtime.router --host 0.0.0.0 --port 8000 --backends http://replica0:8001,http://replica1:8002
@@ -266,28 +290,29 @@ with client.responses.stream(
 
 ---
 
-## What's Inside (`18` Non-Destructive SM12.1 Runtime & Multi-API Optimizations)
+## What's Inside (`19` Non-Destructive SM12.1 Runtime & Multi-API Optimizations)
 
-All 18 patches live in [`spark_ernie_runtime/patch.py`](spark_ernie_runtime/patch.py) and `kernels/`:
+All 19 patches live in [`spark_ernie_runtime/patch.py`](spark_ernie_runtime/patch.py) and `kernels/`:
 
 1. **cuBLAS `BF16x2` (`w_hi + w_lo`) Tensor-Core MoE Router (`SPARK_PATCH_GATE_BF16X2=1`):** [`kernels/moe/gate_bf16x2.py`](kernels/moe/gate_bf16x2.py) replaces FP32 SIMT `GateLinear` (`246.2 ms` at 8K prefill on GB10) with Tensor-Core `BF16x2` (`100.00%` exact top-10 at `T=8`, `99.99%` at `T=8192`; **`-161.1 ms` per 8K chunk** and **`2.2–2.6×` faster decode**).
-2. **Fused HCA `vha_v_add_inv_rope_fp8_quant` + L2-Tiled `fp8_einsum` + 2-Chunk Compute/RDMA Pipeline + In-Place `sigmoid_mul` (`SPARK_PATCH_HCA_OPROJ_FUSED=1`, `SPARK_HCA_PIPELINE=1`):** [`kernels/mhc_hca/vha_triton.py`](kernels/mhc_hca/vha_triton.py) fuses `o + V@z` + inverse RoPE + per-128 UE8M0 FP8 quant (`100%` scale parity, `-44.5 ms` TP4 / `-94.4 ms` TP2 at 8K), fixes DeepGEMM `fp8_einsum`'s `3.53×` L2-thrashing cliff at `T=8192` via `T_tile=1024` (`99.5 → 28.0 ms` TP4, `198 → 91 ms` TP2), and overlaps `vha_ar` & `wo_b_ar` RDMA on `comm_stream` with GPU compute (`T >= 4096`) for **`2,800 tok/s` 8K / `2,663 tok/s` 64K** (`+35%`) cold prefill!
+2. **Fused HCA `vha_v_add_inv_rope_fp8_quant` & Bit-Exact `vha_v_add_inv_rope_bf16` + L2-Tiled `fp8_einsum` + 2-Chunk Compute/RDMA Pipeline + In-Place `sigmoid_mul` (`SPARK_PATCH_HCA_OPROJ_FUSED=1`, `SPARK_HCA_PIPELINE=1`):** [`kernels/mhc_hca/vha_triton.py`](kernels/mhc_hca/vha_triton.py) fuses `o + V@z` + inverse RoPE for **both** FP8 (`100%` UE8M0 scale parity, `-44.5 ms` TP4 / `-94.4 ms` TP2 at 8K) and lossless BF16 attention (`0.00000` max diff, **`3.34×` faster decode / `2.64×` faster 4K prefill**), fixes DeepGEMM `fp8_einsum`'s `3.53×` L2-thrashing cliff via `T_tile=1024`, and overlaps `vha_ar` & `wo_b_ar` RDMA on `comm_stream` with GPU compute (`T >= 4096`)!
 3. **GB10 L2-Aware `mhc_sm121(twopass)` Unlocked for `T=1..32` (`SPARK_PATCH_MHC=1`):** [`kernels/mhc_hca/mhc_sm121.py`](kernels/mhc_hca/mhc_sm121.py) runs register-resident `twopass` across `1 <= T <= 32` (`1.71–1.81×` faster at `T=1, 7, 8`, **`-2.9 ms/step`** across all 43 layers) and L2-chunked prefill at `T >= 512`.
 4. **Probabilistic Vocab-Parallel DSpark + 64-Cand `multimax` (`SPARK_DSPARK_VOCAB_PARALLEL=1`, `SPARK_DSPARK_VP_PROB=1`, `SPARK_DSPARK_DRAFT_TAU=1.0`):** [`kernels/dspark/vocab_parallel_greedy.py`](kernels/dspark/vocab_parallel_greedy.py) shards `markov_w2` across TP ranks (`2×–4×` less Markov BW), skips the full-vocab draft gather (`+2.34 GiB` KV), and runs probabilistic drafting calibrated for official `T=1.0, top_p=0.95` sampling (`+33.7%` on real 8-turn high-reasoning coding, `0/8` loops).
 5. **512-Expert Coupon-Collector MoE Cost Curve + Dinkelbach Marginal Adaptive Verification (`SPARK_PATCH_ADAPTIVE_VERIFY=1`, `SPARK_DSPARK_VERIFY_RULE=marginal`, `SPARK_DSPARK_MOE_COST_CURVE=1`):** Unlocks `enable_adaptive_verification=true` on SM12.1 (`FlashInferSM120` varlen-CG + `Indexer` flattened) and replaces the flat dummy-token startup cost table with ERNIE 5.5's true 512-expert coupon-collector slope (`m <= 64`, `bw=250 GB/s`), cutting prose step time `51.1 → 39.6 ms` while scaling batched decode cleanly to **`853.8 tok/s` @ `B=64`**!
 6. **Fused SM12.1 Triton `VHAPostMix` + BF16 All-Reduce (`SPARK_PATCH_VHA_TRITON=1`, `SPARK_PATCH_VHA_BF16_AR=1`):** Register-tiled FP32-accumulated BF16 Triton kernels (`4.23×` faster on 4× prefill, `4.00×` on 2× prefill, `2.2–3.4×` faster decode) + half-size BF16 RDMA payload across all 43 layers.
-7. **Row-Sharded `fc2_latent_proj` Fused Into `shared_experts` All-Reduce (`SPARK_PATCH_FC2_LATENT_TP=1`):** `4×` less `fc2` compute/DRAM/VRAM on TP=4 (`2×` on TP=2), **zero extra collectives**, 100% mathematically exact.
+7. **Row-Sharded FP8 `fc2_latent_proj` Fused Into `shared_experts` All-Reduce (`SPARK_PATCH_FC2_LATENT_TP=1`):** `4×` less `fc2` compute/DRAM/VRAM on TP=4 (`2×` on TP=2), **zero extra collectives**, automatically guarded to FP8 `fc2_latent_proj` weights so BF16-attention NVFP4 checkpoints never hit CUDA-graph replay faults.
 8. **Byte-Packed Hybrid KV-Cache Grouping (`SPARK_PATCH_KV_PACK=1`):** Packs all 37 tiny HCA compressed layers into 1 KV group (`16 → 12` groups), slashing per-request `1M`-context KV footprint **`14.02 → 8.26 GiB` (`1.70×` more `1M` capacity, `0.0%` DSA penalty)** — enabling full **`1,048,576` (`1M`) context even on 2× Sparks with DSpark!**
-9. **Bidirectional Shared Lossless 12-bit Packed BF16 TileLang LM Head + `markov_w2` (`SPARK_PACKED_BF16_LM_HEAD=1`, `SPARK_PACKED_BF16_MARKOV=1`):** [`kernels/lm_head/packed_bf16_lm_head.py`](kernels/lm_head/packed_bf16_lm_head.py) (`1e-6` exact FP32 parity, CUDA-graph safe, shared bidirectionally across target & draft LM heads with **0 extra VRAM**: `1.29×` faster on TP=4, `1.36–1.79×` on TP=2).
+9. **Bidirectional Shared Lossless 12-bit Packed BF16 TileLang LM Head + `markov_w2` with Chunked Low-Memory Packer (`SPARK_PACKED_BF16_LM_HEAD=1`, `SPARK_PACKED_BF16_MARKOV=1`):** [`kernels/lm_head/packed_bf16_lm_head.py`](kernels/lm_head/packed_bf16_lm_head.py) (`1e-6` exact FP32 parity, CUDA-graph safe, shared bidirectionally across target & draft LM heads with **0 extra VRAM**: `1.29×` faster on TP=4, `1.36–1.79×` on TP=2; chunked `8192`-row `pack_bf16_exact()` slashes startup temporary VRAM **`18 GiB → 2.09 GiB`** for tight `2×` NVFP4 boots!).
 10. **GB10 Unified-Memory Safetensors Page-Cache Eviction + `kv_cache_memory_bytes` `empty_cache()` Fix (`SPARK_PATCH_UMA_FADVISE=1`):** Unprivileged `os.posix_fadvise(..., POSIX_FADV_DONTNEED)` after `load_model()` immediately recovers `+3.2–4.6 GiB` of unified RAM before KV sizing (zero root), and wraps `Worker.determine_available_memory` with `_scoped_allocator_max_split(20)` + `torch.cuda.empty_cache()` to fix upstream vLLM's `~17 GiB` pinned-segment bug when `--kv-cache-memory-bytes` is set!
 11. **One-Shot RoCEv2 Collectives via `sparknet` (`SPARK_USE_SPARKNET=1`):** Drop-in `CudaCommunicator` overlay inside `FULL_AND_PIECEWISE` CUDA graphs: **`10.3 µs`** on 2× direct (`6.8×` vs NCCL) and **`15.3 µs`** on 4× switchless ring (`6.0×` vs NCCL).
 12. **DSpark Drafter Padding-Row MoE Mask (`SPARK_PATCH_DSPARK_PAD_MASK=1`):** Skips all 3 draft MoE layers on CUDA-graph padding rows.
 13. **Column-Parallel DSpark `main_proj` (`SPARK_DSPARK_MAIN_PROJ_TP=1`):** Shards `[12288 → 4096]` across TP ranks (`2×–4×` less draft projection read).
-14. **Humming MXFP4 Indexed MoE (`242 GB/s`) + Safe Selective `HummingFP8` Linears (`222 GB/s`)** (`SPARK_PATCH_HUMMING_FP8_SAFE=1`).
+14. **Humming MXFP4 Indexed MoE (`242 GB/s`) + Marlin/Humming W4A16 NVFP4 MoE + Safe Selective `HummingFP8` Linears (`222 GB/s`)** (`SPARK_PATCH_HUMMING_FP8_SAFE=1`).
 15. **FlashInfer SM120 CPB Fix (`SPARK_PATCH_FLASHINFER_CPB=1`):** `1.20–1.25×` HCA decode & `3.20–5.87×` DSA decode at `B=16..64`.
 16. **Bit-Exact Fused ERNIE 5.5 MoE Router (`SPARK_PATCH_ROUTER=1`):** [`kernels/moe/fused_ernie55_router.py`](kernels/moe/fused_ernie55_router.py) (`1.56–2.03×`, `max_abs=0.0`).
 17. **Anthropic `/v1/messages` + OpenAI Multi-API & Hybrid-KV Prefix-Cache Compatibility (`SPARK_PATCH_ANTHROPIC_COMPAT=1`, `--prefix-cache-retention-interval 2048`, `--enable-prompt-tokens-details`, `--anthropic-disabled-thinking-effort none`):** Fixes `AuthenticationMiddleware` to accept Anthropic `x-api-key`, prevents `AnthropicServingMessages._detect_merge_inline_system` from rewriting Claude Code inline `<system-reminder>` blocks into the top system message (preserving `96.4%` KV cache hits!), normalizes `reasoning_effort` (`none`/`off`/`minimal`/`max`) cleanly for ERNIE 5.5's renderer, eliminates SWA 256-token boundary prefix-cache cliffs (`95.9%–97.3%` hits across all offsets), and reports exact `cached_tokens` / `cache_read_input_tokens` across all three APIs!
-18. **GB10 Unified-RAM & Startup Hardening:** `MALLOC_ARENA_MAX=2`, `MALLOC_MMAP_THRESHOLD_=1048576`, `VLLM_ENGINE_READY_TIMEOUT_S=1800` (prevents 600s timeout during cold TP=2 NVMe loads), `CUDA_HOME=/usr/local/cuda`, `SPARKNET_ROCE_TIMEOUT_MS=120000`, `4x-1m-fast` `gpu_util=0.68` (`~38+ GiB` free unified RAM per Spark for OOM-proof `1M` prefill!), and tuned Dual-Rail NCCL (`4ch, ^LL128`, switchless bidirectional ring4).
+18. **ModelOpt `W4A16_NVFP4` `hf_quant_config.json` Loader Compat (`SPARK_PATCH_NVFP4_COMPAT=1`):** Bridges vLLM `0.32.0`'s `ModelArchConfigConvertorBase` so `W4A16_NVFP4` checkpoints with `producer.name == "modelopt"` load cleanly into `ModelOptNvFp4Config` out of the box.
+19. **GB10 Unified-RAM & Startup Hardening:** `MALLOC_ARENA_MAX=2`, `MALLOC_MMAP_THRESHOLD_=1048576`, `VLLM_ENGINE_READY_TIMEOUT_S=1800` (prevents 600s timeout during cold TP=2 NVMe loads), `CUDA_HOME=/usr/local/cuda`, `SPARKNET_ROCE_TIMEOUT_MS=120000`, `4x-1m-fast` `gpu_util=0.68` (`~38+ GiB` free unified RAM per Spark for OOM-proof `1M` prefill!), tuned Dual-Rail NCCL (`4ch, ^LL128`, switchless bidirectional ring4), and optional `64 KiB` kernel `nvidia-uvm` 4 KiB sub-page page-table slab toolkit ([`tools/uvm_64k_slab/`](tools/uvm_64k_slab/README.md)).
 
 ---
 

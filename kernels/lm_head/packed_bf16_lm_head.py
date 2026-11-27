@@ -64,53 +64,84 @@ def _choose_exponent_base(bits_u16: torch.Tensor) -> int:
 
 
 @torch.no_grad()
-def pack_bf16_exact(weight: torch.Tensor, verify: bool = True) -> PackedBF16Weight:
-    """Losslessly pack a 2D BF16 matrix [N, K] (K % 128 == 0) into 12-bit packed form."""
+def pack_bf16_exact(weight: torch.Tensor, verify: bool = True, chunk_rows: int = 8192) -> PackedBF16Weight:
+    """Losslessly pack a 2D BF16 matrix [N, K] (K % 128 == 0) into 12-bit packed form.
+
+    Processes in row chunks so peak temporary VRAM stays <0.5 GiB even for 100K+ vocab
+    shards on unified-memory GB10 (instead of ~16-18 GiB of full-matrix int32 temporaries).
+    """
     assert weight.ndim == 2 and weight.dtype == torch.bfloat16
     N, K = weight.shape
     assert K % GROUP == 0, f"K={K} must be divisible by {GROUP}"
     dev = weight.device
+    w_c = weight.contiguous()
 
-    bits = weight.contiguous().view(torch.int16).to(torch.int32) & 0xFFFF
-    sign = (bits >> 15) & 0x1
-    exp = (bits >> 7) & 0xFF
-    mant = bits & 0x7F
+    # Pass 1: chunked exponent histogram -> exact optimal 15-exponent window base
+    hist = torch.zeros(256, dtype=torch.int64, device=dev)
+    for r0 in range(0, N, chunk_rows):
+        r1 = min(r0 + chunk_rows, N)
+        b = w_c[r0:r1].view(torch.int16).to(torch.int32) & 0xFFFF
+        exp = (b >> 7) & 0xFF
+        mant = b & 0x7F
+        nz = exp[(exp != 0) | (mant != 0)]
+        if nz.numel() > 0:
+            hist += torch.bincount(nz, minlength=256)
+        del b, exp, mant, nz
+    h_cpu = hist.cpu().tolist()
+    win = sum(h_cpu[1:16])
+    base, best_count = 1, win
+    for cand in range(2, 241):
+        win += h_cpu[cand + 14] - h_cpu[cand - 1]
+        if win > best_count:
+            best_count = win
+            base = cand
 
-    base = _choose_exponent_base(bits)
-    is_exact_zero = (exp == 0) & (mant == 0)
-    in_window = (exp >= base) & (exp <= base + 14)
-    is_exc = ~(is_exact_zero | in_window)
-
-    # Low byte: sign in bit 7, mantissa in bits 0..6 (zeroed for exceptions)
-    low = torch.where(is_exc, torch.zeros_like(bits), (sign << 7) | mant).to(torch.uint8)
-    # 4-bit exponent code: 0 for exact zero or exception, (exp - base + 1) in 1..15 otherwise
-    code = torch.where(in_window, exp - base + 1, torch.zeros_like(bits)).to(torch.uint8)
-
-    # Pack codes in 128-col groups: low nibble = col j, high nibble = col j + 64
-    code_g = code.view(N, K // GROUP, 2, HALF)
-    packed_codes = (code_g[:, :, 0, :] | (code_g[:, :, 1, :] << 4)).reshape(N, K // 2)
-
+    # Pass 2: chunked packing into preallocated uint8 output + CSR exceptions
     packed_values = torch.empty((N, K + K // 2), dtype=torch.uint8, device=dev)
-    packed_values[:, :K] = low
-    packed_values[:, K:] = packed_codes
+    row_counts = torch.zeros((N,), dtype=torch.int32, device=dev)
+    exc_rows_list: list[torch.Tensor] = []
+    exc_entries_list: list[torch.Tensor] = []
 
-    # CSR exception list sorted by row
-    exc_rc = torch.nonzero(is_exc, as_tuple=False)  # [E, 2]
-    if exc_rc.numel() > 0:
-        exc_rows = exc_rc[:, 0].to(torch.int32).contiguous()
-        exc_cols = exc_rc[:, 1].to(torch.int32)
-        exc_bits = bits[exc_rc[:, 0], exc_rc[:, 1]].to(torch.int32)
-        exc_entries = ((exc_cols << 16) | (exc_bits & 0xFFFF)).to(torch.int32).contiguous()
-        row_counts = is_exc.sum(dim=1, dtype=torch.int32)
+    for r0 in range(0, N, chunk_rows):
+        r1 = min(r0 + chunk_rows, N)
+        rn = r1 - r0
+        b = w_c[r0:r1].view(torch.int16).to(torch.int32) & 0xFFFF
+        sign = (b >> 15) & 0x1
+        exp = (b >> 7) & 0xFF
+        mant = b & 0x7F
+
+        is_exact_zero = (exp == 0) & (mant == 0)
+        in_window = (exp >= base) & (exp <= base + 14)
+        is_exc = ~(is_exact_zero | in_window)
+
+        low = torch.where(is_exc, 0, (sign << 7) | mant).to(torch.uint8)
+        code = torch.where(in_window, exp - base + 1, 0).to(torch.uint8)
+        code_g = code.view(rn, K // GROUP, 2, HALF)
+        packed_codes = (code_g[:, :, 0, :] | (code_g[:, :, 1, :] << 4)).reshape(rn, K // 2)
+
+        packed_values[r0:r1, :K] = low
+        packed_values[r0:r1, K:] = packed_codes
+
+        rc = torch.nonzero(is_exc, as_tuple=False)
+        if rc.numel() > 0:
+            exc_rows_list.append((rc[:, 0] + r0).to(torch.int32))
+            exc_cols = rc[:, 1].to(torch.int32)
+            exc_bits = b[rc[:, 0], rc[:, 1]]
+            exc_entries_list.append(((exc_cols << 16) | (exc_bits & 0xFFFF)).to(torch.int32))
+            row_counts[r0:r1] = is_exc.sum(dim=1, dtype=torch.int32)
+        del b, sign, exp, mant, is_exact_zero, in_window, is_exc, low, code, code_g, packed_codes, rc
+
+    if exc_rows_list:
+        exc_rows = torch.cat(exc_rows_list).contiguous()
+        exc_entries = torch.cat(exc_entries_list).contiguous()
+        num_exc = int(exc_rows.numel())
     else:
-        # Allocate 1 dummy element so empty tensor pointers remain valid in TileLang
         exc_rows = torch.zeros((1,), dtype=torch.int32, device=dev)
         exc_entries = torch.zeros((1,), dtype=torch.int32, device=dev)
-        row_counts = torch.zeros((N,), dtype=torch.int32, device=dev)
+        num_exc = 0
 
     row_offsets = torch.zeros((N + 1,), dtype=torch.int32, device=dev)
     torch.cumsum(row_counts, dim=0, out=row_offsets[1:])
-    num_exc = int(exc_rc.shape[0])
 
     packed = PackedBF16Weight(
         values=packed_values,
@@ -123,7 +154,7 @@ def pack_bf16_exact(weight: torch.Tensor, verify: bool = True) -> PackedBF16Weig
     )
     if verify:
         unpacked = unpack_bf16_exact(packed)
-        assert torch.equal(unpacked.view(torch.int16), weight.view(torch.int16)), (
+        assert torch.equal(unpacked.view(torch.int16), w_c.view(torch.int16)), (
             "12-bit packed BF16 round-trip bit verification FAILED!"
         )
     return packed
