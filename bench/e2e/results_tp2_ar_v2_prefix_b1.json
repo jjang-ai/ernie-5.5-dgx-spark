@@ -1,0 +1,104 @@
+{
+  "label": "tp2_ar_v2_128k",
+  "single_stream": [
+    {
+      "ptok": 40,
+      "ctok": 256,
+      "rtok": 0,
+      "ttft_s": 0.2717,
+      "wall_s": 12.2484,
+      "decode_tps": 21.37,
+      "e2e_tps": 20.9,
+      "name": "off_prose",
+      "ans_head": "# io_uring vs epoll: syscall overhead elimination\n\n## Core mechanism\n\nLinux `io_uring` is a kernel asynchronous I/O subs"
+    },
+    {
+      "ptok": 45,
+      "ctok": 341,
+      "rtok": 0,
+      "ttft_s": 0.2634,
+      "wall_s": 16.0564,
+      "decode_tps": 21.59,
+      "e2e_tps": 21.24,
+      "name": "off_code",
+      "ans_head": "Here is a complete, clean implementation of an LRU cache with TTL expiration using `collections.OrderedDict`:\n\n```python"
+    },
+    {
+      "ptok": 53,
+      "ctok": 130,
+      "rtok": 77,
+      "ttft_s": 3.9228,
+      "wall_s": 6.4091,
+      "decode_tps": 52.29,
+      "e2e_tps": 20.28,
+      "name": "high_math",
+      "ans_head": "48 km/h.\n\nThe first leg takes 120/60 = 2 hours, the return takes 120/40 = 3 hours. Total distance is 240 km over 5 hours"
+    },
+    {
+      "ptok": 56,
+      "ctok": 142,
+      "rtok": 87,
+      "ttft_s": 4.3495,
+      "wall_s": 6.9075,
+      "decode_tps": 55.51,
+      "e2e_tps": 20.56,
+      "name": "high_zh",
+      "ans_head": "48 \u516c\u91cc/\u5c0f\u65f6\u3002\n\n\u5168\u7a0b\u603b\u8ddd\u79bb 240 \u516c\u91cc\uff0c\u53bb\u7a0b\u8017\u65f6 120/60 = 2 \u5c0f\u65f6\uff0c\u56de\u7a0b\u8017\u65f6 120/40 = 3 \u5c0f\u65f6\uff0c\u5408\u8ba1 5 \u5c0f\u65f6\uff0c240\u00f75 = 48\u3002"
+    },
+    {
+      "ptok": 53,
+      "ctok": 1024,
+      "rtok": 1024,
+      "ttft_s": 47.6906,
+      "wall_s": 47.6906,
+      "decode_tps": 21.47,
+      "e2e_tps": 21.47,
+      "name": "high_code",
+      "ans_head": ""
+    }
+  ],
+  "prefix_cache": [
+    {
+      "target_prefix": 8192,
+      "actual_ptok": 7272,
+      "cold_ttft_s": 4.6291,
+      "cold_prefill_tps": 1570.9,
+      "warm1_ttft_s": 0.2679,
+      "warm2_high_ttft_s": 3.2653,
+      "prefix_ttft_speedup": 17.28,
+      "warm1_decode_tps": 22.85,
+      "warm2_high_decode_tps": 60.62,
+      "code_recalled_cold": true,
+      "code_recalled_warm1": true,
+      "code_recalled_warm2": true
+    },
+    {
+      "target_prefix": 16384,
+      "actual_ptok": 14482,
+      "cold_ttft_s": 8.9495,
+      "cold_prefill_tps": 1618.2,
+      "warm1_ttft_s": 0.6765,
+      "warm2_high_ttft_s": 2.9173,
+      "prefix_ttft_speedup": 13.23,
+      "warm1_decode_tps": 25.06,
+      "warm2_high_decode_tps": 86.55,
+      "code_recalled_cold": true,
+      "code_recalled_warm1": true,
+      "code_recalled_warm2": true
+    },
+    {
+      "target_prefix": 32768,
+      "actual_ptok": 28900,
+      "cold_ttft_s": 17.844,
+      "cold_prefill_tps": 1619.6,
+      "warm1_ttft_s": 0.6012,
+      "warm2_high_ttft_s": 2.9571,
+      "prefix_ttft_speedup": 29.68,
+      "warm1_decode_tps": 22.57,
+      "warm2_high_decode_tps": 86.92,
+      "code_recalled_cold": true,
+      "code_recalled_warm1": true,
+      "code_recalled_warm2": true
+    }
+  ]
+}

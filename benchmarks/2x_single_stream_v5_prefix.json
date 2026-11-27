@@ -1,0 +1,90 @@
+{
+  "label": "2x_single_stream_v5_sparknet_vp",
+  "single_stream": [
+    {
+      "ptok": 40,
+      "ctok": 256,
+      "rtok": 0,
+      "ttft_s": 0.2427,
+      "wall_s": 6.8101,
+      "decode_tps": 38.98,
+      "e2e_tps": 37.59,
+      "name": "off_prose",
+      "ans_head": "Here is a technical overview of the architectural differences between `epoll` and `io_uring` regarding system call overh"
+    },
+    {
+      "ptok": 45,
+      "ctok": 384,
+      "rtok": 0,
+      "ttft_s": 0.2525,
+      "wall_s": 5.5936,
+      "decode_tps": 71.89,
+      "e2e_tps": 68.65,
+      "name": "off_code",
+      "ans_head": "```python\nimport time\nfrom collections import OrderedDict\nfrom typing import Any, Hashable, Optional\n\n\nclass TTLOrderedD"
+    },
+    {
+      "ptok": 53,
+      "ctok": 121,
+      "rtok": 53,
+      "ttft_s": 1.2587,
+      "wall_s": 2.226,
+      "decode_tps": 125.1,
+      "e2e_tps": 54.36,
+      "name": "high_math",
+      "ans_head": "Average speed = total distance \u00f7 total time.\n\n- Outbound: 120 km \u00f7 60 km/h = 2 h\n- Return: 120 km \u00f7 40 km/h = 3 h\n- Tota"
+    },
+    {
+      "ptok": 56,
+      "ctok": 295,
+      "rtok": 148,
+      "ttft_s": 2.3986,
+      "wall_s": 4.4857,
+      "decode_tps": 141.34,
+      "e2e_tps": 65.76,
+      "name": "high_zh",
+      "ans_head": "\u5168\u7a0b\u5e73\u5747\u65f6\u901f\u662f **48 \u516c\u91cc/\u5c0f\u65f6**\u3002\n\n\u8ba1\u7b97\u8fc7\u7a0b\uff1a\n\n\u5e73\u5747\u901f\u5ea6 = \u603b\u8def\u7a0b \u00f7 \u603b\u65f6\u95f4\uff0c\u800c\u4e0d\u662f\u4e24\u4e2a\u901f\u5ea6\u7684\u7b80\u5355\u5e73\u5747\u3002\n\n- \u53bb\u7a0b\u65f6\u95f4\uff1a120 \u00f7 60 = 2 \u5c0f\u65f6\n- \u56de\u7a0b\u65f6\u95f4\uff1a120 \u00f7 40 = 3 \u5c0f\u65f6\n- \u603b\u8def\u7a0b\uff1a120 + "
+    },
+    {
+      "ptok": 53,
+      "ctok": 1024,
+      "rtok": 1024,
+      "ttft_s": 23.2842,
+      "wall_s": 23.2842,
+      "decode_tps": 43.98,
+      "e2e_tps": 43.98,
+      "name": "high_code",
+      "ans_head": ""
+    }
+  ],
+  "prefix_cache": [
+    {
+      "target_prefix": 8192,
+      "actual_ptok": 7272,
+      "cold_ttft_s": 4.6663,
+      "cold_prefill_tps": 1558.4,
+      "warm1_ttft_s": 0.4457,
+      "warm2_high_ttft_s": 1.19,
+      "prefix_ttft_speedup": 10.47,
+      "warm1_decode_tps": 49.78,
+      "warm2_high_decode_tps": 193.1,
+      "code_recalled_cold": true,
+      "code_recalled_warm1": true,
+      "code_recalled_warm2": true
+    },
+    {
+      "target_prefix": 32768,
+      "actual_ptok": 28899,
+      "cold_ttft_s": 18.2774,
+      "cold_prefill_tps": 1581.1,
+      "warm1_ttft_s": 0.5888,
+      "warm2_high_ttft_s": 1.9463,
+      "prefix_ttft_speedup": 31.04,
+      "warm1_decode_tps": 44.62,
+      "warm2_high_decode_tps": 190.65,
+      "code_recalled_cold": true,
+      "code_recalled_warm1": true,
+      "code_recalled_warm2": true
+    }
+  ]
+}

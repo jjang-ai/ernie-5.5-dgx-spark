@@ -1,0 +1,100 @@
+{
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "effort": "high",
+  "clean_stops": "8/8",
+  "loops": "0/8",
+  "turn1_recall": true,
+  "avg_decode_tps": 59.55,
+  "max_decode_tps": 76.53,
+  "turns": [
+    {
+      "turn": 1,
+      "prompt_tokens": 98,
+      "cached_tokens": 0,
+      "completion_tokens": 805,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.268,
+      "decode_tps": 59.28,
+      "e2e_tps": 58.13
+    },
+    {
+      "turn": 2,
+      "prompt_tokens": 371,
+      "cached_tokens": 0,
+      "completion_tokens": 277,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.413,
+      "decode_tps": 60.07,
+      "e2e_tps": 55.13
+    },
+    {
+      "turn": 3,
+      "prompt_tokens": 586,
+      "cached_tokens": 0,
+      "completion_tokens": 203,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.466,
+      "decode_tps": 53.17,
+      "e2e_tps": 47.39
+    },
+    {
+      "turn": 4,
+      "prompt_tokens": 738,
+      "cached_tokens": 0,
+      "completion_tokens": 437,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.438,
+      "decode_tps": 76.53,
+      "e2e_tps": 71.07
+    },
+    {
+      "turn": 5,
+      "prompt_tokens": 973,
+      "cached_tokens": 0,
+      "completion_tokens": 366,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.529,
+      "decode_tps": 54.68,
+      "e2e_tps": 50.68
+    },
+    {
+      "turn": 6,
+      "prompt_tokens": 1124,
+      "cached_tokens": 0,
+      "completion_tokens": 273,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.48,
+      "decode_tps": 59.87,
+      "e2e_tps": 54.16
+    },
+    {
+      "turn": 7,
+      "prompt_tokens": 1246,
+      "cached_tokens": 0,
+      "completion_tokens": 1309,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.458,
+      "decode_tps": 55.74,
+      "e2e_tps": 54.67
+    },
+    {
+      "turn": 8,
+      "prompt_tokens": 1575,
+      "cached_tokens": 0,
+      "completion_tokens": 137,
+      "finish_reason": "stop",
+      "loop": false,
+      "ttft_s": 0.584,
+      "decode_tps": 57.02,
+      "e2e_tps": 45.86
+    }
+  ]
+}

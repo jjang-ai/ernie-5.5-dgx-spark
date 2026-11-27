@@ -1,0 +1,81 @@
+{
+  "label": "tp4_dspark_v2_vp_greedy",
+  "base": "http://127.0.0.1:18000/v1",
+  "parity": [
+    {
+      "name": "math_high",
+      "think": true,
+      "ctok": 123,
+      "dt": 1.57,
+      "ttft": 0.865,
+      "decode_tps": 174.56,
+      "ans_head": "Average speed = total distance \u00f7 total time.\n\n- Outbound: 120 km \u00f7 60 km/h = 2 h\n- Return: 120 km \u00f7 40 km/h = 3 h\n- Total: 240 km \u00f7 5 h = **48 km/h**\n\n**Answer:"
+    },
+    {
+      "name": "algo_off",
+      "think": false,
+      "ctok": 63,
+      "dt": 1.009,
+      "ttft": 0.163,
+      "decode_tps": 74.51,
+      "ans_head": "Binary search runs in O(log n) time because it repeatedly halves the search space with each comparison, reducing the problem size from n to n/2, n/4, and so on."
+    },
+    {
+      "name": "zh_high",
+      "think": true,
+      "ctok": 295,
+      "dt": 3.212,
+      "ttft": 1.746,
+      "decode_tps": 201.23,
+      "ans_head": "\u5168\u7a0b\u5e73\u5747\u65f6\u901f\u662f **48 \u516c\u91cc/\u5c0f\u65f6**\u3002\n\n\u8ba1\u7b97\u8fc7\u7a0b\uff1a\n\n\u5e73\u5747\u901f\u5ea6 = \u603b\u8def\u7a0b \u00f7 \u603b\u65f6\u95f4\uff0c\u800c\u4e0d\u662f\u4e24\u4e2a\u901f\u5ea6\u7684\u7b80\u5355\u5e73\u5747\u3002\n\n- \u53bb\u7a0b\u65f6\u95f4\uff1a120 \u00f7 60 = 2 \u5c0f\u65f6\n- \u56de\u7a0b\u65f6\u95f4\uff1a120 \u00f7 40 = 3 \u5c0f\u65f6\n- \u603b\u8def\u7a0b\uff1a120 + 120 = 240 \u516c\u91cc\n- \u603b\u65f6\u95f4\uff1a2 + 3 = 5 \u5c0f\u65f6\n- \u5e73\u5747\u901f\u5ea6\uff1a2"
+    }
+  ],
+  "decode_batches": [
+    {
+      "concurrency": 1,
+      "wall_s": 4.699,
+      "total_ctok": 256,
+      "total_ptok": 64,
+      "agg_decode_tps": 54.48,
+      "mean_req_decode_tps": 57.53,
+      "avg_ttft_s": 0.249
+    },
+    {
+      "concurrency": 2,
+      "wall_s": 6.261,
+      "total_ctok": 512,
+      "total_ptok": 121,
+      "agg_decode_tps": 81.78,
+      "mean_req_decode_tps": 46.81,
+      "avg_ttft_s": 0.41
+    },
+    {
+      "concurrency": 4,
+      "wall_s": 10.029,
+      "total_ctok": 1024,
+      "total_ptok": 243,
+      "agg_decode_tps": 102.11,
+      "mean_req_decode_tps": 32.56,
+      "avg_ttft_s": 0.441
+    },
+    {
+      "concurrency": 8,
+      "wall_s": 12.743,
+      "total_ctok": 2048,
+      "total_ptok": 491,
+      "agg_decode_tps": 160.72,
+      "mean_req_decode_tps": 26.13,
+      "avg_ttft_s": 0.615
+    },
+    {
+      "concurrency": 16,
+      "wall_s": 17.411,
+      "total_ctok": 4096,
+      "total_ptok": 983,
+      "agg_decode_tps": 235.25,
+      "mean_req_decode_tps": 19.36,
+      "avg_ttft_s": 0.789
+    }
+  ],
+  "prefill": []
+}

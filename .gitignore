@@ -1,0 +1,18 @@
+# Ignore local references, caches, logs, and machine-local configs
+upstream_ref/
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.cubin
+*.ptx
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
+*.log
+cluster.json
+config.json
+.env
+.DS_Store

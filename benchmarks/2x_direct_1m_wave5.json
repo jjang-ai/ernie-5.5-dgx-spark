@@ -1,0 +1,123 @@
+{
+  "single": {
+    "off_code": {
+      "pt": 42,
+      "ct": 384,
+      "dt": 7.630398614001024,
+      "ttft": 0.14863396600048873,
+      "dec": 51.32479008179202,
+      "e2e": 50.32502486769146,
+      "preview": "Here is a complete implementation of a Single-Producer, Single-Consumer (SPSC) lock-free ring buffer in Python, using `c"
+    },
+    "off_prose": {
+      "pt": 44,
+      "ct": 256,
+      "dt": 7.1487838749999355,
+      "ttft": 0.19245254199995543,
+      "dec": 36.801007276000135,
+      "e2e": 35.81028668320209,
+      "preview": "Distributed consensus protocols solve a deceptively simple problem: how can a set of machines agree on a single value or"
+    },
+    "algo_off": {
+      "pt": 43,
+      "ct": 256,
+      "dt": 3.9578647159996763,
+      "ttft": 0.18091508999896178,
+      "dec": 67.77956429116314,
+      "e2e": 64.68134167525218,
+      "preview": "The time complexity of binary search is **O(log n)**.  **Why:** With each comparison, the algorithm eliminates half of t"
+    },
+    "high_math": {
+      "pt": 66,
+      "ct": 73,
+      "dt": 1.451013497000531,
+      "ttft": 0.2093031639997207,
+      "dec": 58.78987881463684,
+      "e2e": 50.30966297067689,
+      "preview": "48 km/h"
+    },
+    "high_zh": {
+      "pt": 51,
+      "ct": 315,
+      "dt": 4.279226568000013,
+      "ttft": 0.18575025799873401,
+      "dec": 76.9517095360695,
+      "e2e": 73.61143304623431,
+      "preview": "\u5e73\u5747\u901f\u5ea6 = \u603b\u8def\u7a0b \u00f7 \u603b\u65f6\u95f4\uff0c\u800c\u4e0d\u662f\u4e24\u4e2a\u901f\u5ea6\u7684\u7b80\u5355\u5e73\u5747\u3002  \u8ba1\u7b97\u8fc7\u7a0b\uff1a  \u53bb\u7a0b\u65f6\u95f4 = 120 \u00f7 60 = 2 \u5c0f\u65f6 \u8fd4\u7a0b\u65f6\u95f4 = 120 \u00f7 40 = 3 \u5c0f\u65f6  \u603b\u8def\u7a0b = 120 + 120 = 240 \u516c\u91cc \u603b\u65f6\u95f4 = 2 +"
+    }
+  },
+  "prefill": {
+    "8k": {
+      "pt": 6881,
+      "cold_ttft": 3.491064168001685,
+      "cold_tps": 1971.0322322544828,
+      "warm_ttft": 0.4146976469983201,
+      "speedup": 8.418336089608502,
+      "warm_dec": 59.52494316349023,
+      "recall_cold": "3/3",
+      "recall_warm": "3/3"
+    },
+    "32k": {
+      "pt": 27341,
+      "cold_ttft": 13.6462890110015,
+      "cold_tps": 2003.5483623392383,
+      "warm_ttft": 0.5476957830014726,
+      "speedup": 24.91581902679139,
+      "warm_dec": 59.56152515447491,
+      "recall_cold": "3/3",
+      "recall_warm": "3/3"
+    }
+  },
+  "conc_prose": {
+    "1": {
+      "agg": 40.31429077782043,
+      "per_req": 41.594909138760364,
+      "wall": 6.350105510000503,
+      "tot": 256
+    },
+    "2": {
+      "agg": 61.5492333348823,
+      "per_req": 32.07137565376118,
+      "wall": 8.31854390800072,
+      "tot": 512
+    },
+    "4": {
+      "agg": 95.43420647011877,
+      "per_req": 25.037845274892106,
+      "wall": 10.729905322999912,
+      "tot": 1024
+    },
+    "8": {
+      "agg": 139.34986327550192,
+      "per_req": 19.467017807858895,
+      "wall": 14.696821021998403,
+      "tot": 2048
+    }
+  },
+  "conc_code": {
+    "1": {
+      "agg": 43.70420269037045,
+      "per_req": 45.020250343370584,
+      "wall": 5.857560239999657,
+      "tot": 256
+    },
+    "2": {
+      "agg": 66.65010607662036,
+      "per_req": 37.26228685804199,
+      "wall": 7.681908254000518,
+      "tot": 512
+    },
+    "4": {
+      "agg": 100.85143474148775,
+      "per_req": 30.63815308594257,
+      "wall": 10.153549155000292,
+      "tot": 1024
+    },
+    "8": {
+      "agg": 168.3173425859594,
+      "per_req": 23.973264527285924,
+      "wall": 12.16749247900043,
+      "tot": 2048
+    }
+  }
+}

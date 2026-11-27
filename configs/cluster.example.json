@@ -1,0 +1,32 @@
+{
+  "_comment": "Example schema only. Run `spark-ernie discover --hosts spark0,spark1[,spark2,spark3]` to auto-generate ~/.config/spark-ernie/cluster.json for your own 200GbE QSFP cables.",
+  "schema_version": 1,
+  "topology": "ring4",
+  "world_size": 4,
+  "ssh_user": "",
+  "master_addr": "10.0.100.1",
+  "nccl_lib_path": "/opt/nccl-switchless-4hca/libnccl.so.2.30.7",
+  "nodes": [
+    {
+      "rank": 0,
+      "ssh_host": "spark-node-0",
+      "hostname": "spark-node-0",
+      "gpu": "NVIDIA GB10",
+      "mem_gib": 121.7,
+      "host_ip": "10.0.100.1",
+      "oob_iface": "ring0",
+      "nccl_ib_hca": "=rocep1s0f0,roceP2p1s0f0,rocep1s0f1,roceP2p1s0f1",
+      "sparknet_peer_hcas": {
+        "3": ["rocep1s0f1", "roceP2p1s0f1"],
+        "1": ["rocep1s0f0", "roceP2p1s0f0"]
+      },
+      "sparknet_subnets": {
+        "rocep1s0f0": "10.0.0.0/24",
+        "roceP2p1s0f0": "10.0.1.0/24",
+        "rocep1s0f1": "10.0.6.0/24",
+        "roceP2p1s0f1": "10.0.7.0/24"
+      },
+      "links": []
+    }
+  ]
+}

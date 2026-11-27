@@ -1,0 +1,378 @@
+{
+  "custom_mxfp4_moe_decode": {
+    "ep2": {
+      "1": {
+        "time_us": 156.67,
+        "ms_42layers": 6.58,
+        "bw_gbs": 213.4,
+        "bw_pct": 78.2,
+        "active_experts": 5,
+        "cfg": {
+          "rpw1": 8,
+          "rpw2": 4,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.002497,
+          "cos": 0.999997
+        }
+      },
+      "2": {
+        "time_us": 338.94,
+        "ms_42layers": 14.236,
+        "bw_gbs": 217.0,
+        "bw_pct": 79.5,
+        "active_experts": 11,
+        "cfg": {
+          "rpw1": 2,
+          "rpw2": 8,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.00262,
+          "cos": 0.999997
+        }
+      },
+      "4": {
+        "time_us": 643.26,
+        "ms_42layers": 27.017,
+        "bw_gbs": 218.3,
+        "bw_pct": 80.0,
+        "active_experts": 21,
+        "cfg": {
+          "rpw1": 4,
+          "rpw2": 8,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.00273,
+          "cos": 0.999996
+        }
+      },
+      "8": {
+        "time_us": 1089.54,
+        "ms_42layers": 45.761,
+        "bw_gbs": 227.1,
+        "bw_pct": 83.2,
+        "active_experts": 37,
+        "cfg": {
+          "rpw1": 4,
+          "rpw2": 8,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.002616,
+          "cos": 0.999997
+        }
+      }
+    },
+    "ep4": {
+      "1": {
+        "time_us": 67.62,
+        "ms_42layers": 2.84,
+        "bw_gbs": 197.8,
+        "bw_pct": 72.5,
+        "active_experts": 2,
+        "cfg": {
+          "rpw1": 4,
+          "rpw2": 2,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.007812,
+          "rel_l2": 0.002757,
+          "cos": 0.999996
+        }
+      },
+      "2": {
+        "time_us": 124.86,
+        "ms_42layers": 5.244,
+        "bw_gbs": 214.3,
+        "bw_pct": 78.5,
+        "active_experts": 4,
+        "cfg": {
+          "rpw1": 8,
+          "rpw2": 2,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.00277,
+          "cos": 0.999996
+        }
+      },
+      "4": {
+        "time_us": 412.67,
+        "ms_42layers": 17.332,
+        "bw_gbs": 226.9,
+        "bw_pct": 83.1,
+        "active_experts": 14,
+        "cfg": {
+          "rpw1": 4,
+          "rpw2": 4,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.002688,
+          "cos": 0.999997
+        }
+      },
+      "8": {
+        "time_us": 617.34,
+        "ms_42layers": 25.928,
+        "bw_gbs": 227.5,
+        "bw_pct": 83.3,
+        "active_experts": 21,
+        "cfg": {
+          "rpw1": 4,
+          "rpw2": 4,
+          "atomic": false
+        },
+        "vs_fp32": {
+          "max_abs": 0.015625,
+          "rel_l2": 0.002654,
+          "cos": 0.999996
+        }
+      }
+    }
+  },
+  "custom_fp8_block128_gemv": {
+    "shared_gate_up_TP1 (4096->4096)": {
+      "1": {
+        "time_us": 76.74,
+        "bw_gbs": 218.9,
+        "bw_pct": 80.2,
+        "rpw": 2,
+        "rel_l2": 0.00117
+      },
+      "2": {
+        "time_us": 79.94,
+        "bw_gbs": 210.3,
+        "bw_pct": 77.0,
+        "rpw": 2,
+        "rel_l2": 0.001094
+      },
+      "4": {
+        "time_us": 86.08,
+        "bw_gbs": 195.7,
+        "bw_pct": 71.7,
+        "rpw": 4,
+        "rel_l2": 0.001083
+      },
+      "8": {
+        "time_us": 208.9,
+        "bw_gbs": 81.0,
+        "bw_pct": 29.7,
+        "rpw": 8,
+        "rel_l2": 0.001101
+      }
+    },
+    "shared_gate_up_TP2 (4096->2048)": {
+      "1": {
+        "time_us": 41.95,
+        "bw_gbs": 200.3,
+        "bw_pct": 73.4,
+        "rpw": 2,
+        "rel_l2": 0.000948
+      },
+      "2": {
+        "time_us": 45.98,
+        "bw_gbs": 183.0,
+        "bw_pct": 67.0,
+        "rpw": 4,
+        "rel_l2": 0.001068
+      },
+      "4": {
+        "time_us": 49.15,
+        "bw_gbs": 171.7,
+        "bw_pct": 62.9,
+        "rpw": 4,
+        "rel_l2": 0.001024
+      },
+      "8": {
+        "time_us": 116.86,
+        "bw_gbs": 72.6,
+        "bw_pct": 26.6,
+        "rpw": 4,
+        "rel_l2": 0.00113
+      }
+    },
+    "shared_down_TP1    (2048->4096)": {
+      "1": {
+        "time_us": 41.02,
+        "bw_gbs": 204.8,
+        "bw_pct": 75.0,
+        "rpw": 4,
+        "rel_l2": 0.001038
+      },
+      "2": {
+        "time_us": 42.05,
+        "bw_gbs": 200.1,
+        "bw_pct": 73.3,
+        "rpw": 2,
+        "rel_l2": 0.001039
+      },
+      "4": {
+        "time_us": 46.18,
+        "bw_gbs": 182.8,
+        "bw_pct": 67.0,
+        "rpw": 2,
+        "rel_l2": 0.00113
+      },
+      "8": {
+        "time_us": 71.58,
+        "bw_gbs": 118.6,
+        "bw_pct": 43.4,
+        "rpw": 8,
+        "rel_l2": 0.001103
+      }
+    },
+    "shared_down_TP2    (1024->4096)": {
+      "1": {
+        "time_us": 21.57,
+        "bw_gbs": 195.0,
+        "bw_pct": 71.4,
+        "rpw": 2,
+        "rel_l2": 0.001061
+      },
+      "2": {
+        "time_us": 22.46,
+        "bw_gbs": 187.7,
+        "bw_pct": 68.7,
+        "rpw": 2,
+        "rel_l2": 0.001121
+      },
+      "4": {
+        "time_us": 24.67,
+        "bw_gbs": 171.7,
+        "bw_pct": 62.9,
+        "rpw": 4,
+        "rel_l2": 0.001081
+      },
+      "8": {
+        "time_us": 36.86,
+        "bw_gbs": 116.0,
+        "bw_pct": 42.5,
+        "rpw": 2,
+        "rel_l2": 0.001052
+      }
+    },
+    "fc1_latent         (4096->2048)": {
+      "1": {
+        "time_us": 41.89,
+        "bw_gbs": 200.6,
+        "bw_pct": 73.5,
+        "rpw": 2,
+        "rel_l2": 0.000948
+      },
+      "2": {
+        "time_us": 45.06,
+        "bw_gbs": 186.8,
+        "bw_pct": 68.4,
+        "rpw": 4,
+        "rel_l2": 0.001068
+      },
+      "4": {
+        "time_us": 49.22,
+        "bw_gbs": 171.5,
+        "bw_pct": 62.8,
+        "rpw": 4,
+        "rel_l2": 0.001024
+      },
+      "8": {
+        "time_us": 116.74,
+        "bw_gbs": 72.7,
+        "bw_pct": 26.6,
+        "rpw": 4,
+        "rel_l2": 0.00113
+      }
+    }
+  },
+  "fused_situ_fp8_quant": {
+    "EP2 M=1  (E_act=5,  M_sum=640)": {
+      "unfused_us": 40.86,
+      "fused_us": 26.62,
+      "fused_masked_us": 8.19,
+      "speedup_fused": 1.53,
+      "speedup_masked": 4.99,
+      "scale_eq": true,
+      "q_rel_l2": 1.3e-05,
+      "q_max_abs": 1.0
+    },
+    "EP2 M=8  (E_act=37, M_sum=4736)": {
+      "unfused_us": 348.32,
+      "fused_us": 197.73,
+      "fused_masked_us": 18.46,
+      "speedup_fused": 1.76,
+      "speedup_masked": 18.86,
+      "scale_eq": true,
+      "q_rel_l2": 8e-06,
+      "q_max_abs": 1.0
+    },
+    "EP2 M=16 (E_act=59, M_sum=7552)": {
+      "unfused_us": 618.4,
+      "fused_us": 330.85,
+      "fused_masked_us": 24.64,
+      "speedup_fused": 1.87,
+      "speedup_masked": 25.1,
+      "scale_eq": true,
+      "q_rel_l2": 1.2e-05,
+      "q_max_abs": 2.0
+    },
+    "EP2 M=64 (E_act=192,M_sum=24576)": {
+      "unfused_us": 2063.1,
+      "fused_us": 1132.58,
+      "fused_masked_us": 80.19,
+      "speedup_fused": 1.82,
+      "speedup_masked": 25.73,
+      "scale_eq": true,
+      "q_rel_l2": 1e-05,
+      "q_max_abs": 2.0
+    },
+    "EP2 M=512(E_act=256,M_sum=32768)": {
+      "unfused_us": 2727.84,
+      "fused_us": 1493.98,
+      "fused_masked_us": 179.9,
+      "speedup_fused": 1.83,
+      "speedup_masked": 15.16,
+      "scale_eq": true,
+      "q_rel_l2": 1.2e-05,
+      "q_max_abs": 4.0
+    }
+  },
+  "overlap": {
+    "1": {
+      "shared_us": 120.99,
+      "routed_us": 151.55,
+      "seq_us": 277.57,
+      "par_us": 257.38,
+      "speedup": 1.078
+    },
+    "2": {
+      "shared_us": 135.17,
+      "routed_us": 337.92,
+      "seq_us": 475.26,
+      "par_us": 439.33,
+      "speedup": 1.082
+    },
+    "4": {
+      "shared_us": 139.26,
+      "routed_us": 630.82,
+      "seq_us": 776.1,
+      "par_us": 744.48,
+      "speedup": 1.042
+    },
+    "8": {
+      "shared_us": 290.82,
+      "routed_us": 1065.06,
+      "seq_us": 1358.98,
+      "par_us": 1306.69,
+      "speedup": 1.04
+    }
+  }
+}

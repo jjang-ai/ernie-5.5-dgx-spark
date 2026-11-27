@@ -1,0 +1,76 @@
+{
+  "label": "tp2_ar_v4_sparknet",
+  "single_stream": [
+    {
+      "ptok": 40,
+      "ctok": 256,
+      "rtok": 0,
+      "ttft_s": 0.1643,
+      "wall_s": 10.8046,
+      "decode_tps": 24.06,
+      "e2e_tps": 23.69,
+      "name": "off_prose",
+      "ans_head": "Here is a technical overview of the architectural differences between `epoll` and `io_uring`, focusing specifically on t"
+    },
+    {
+      "ptok": 45,
+      "ctok": 384,
+      "rtok": 0,
+      "ttft_s": 0.2805,
+      "wall_s": 16.1469,
+      "decode_tps": 24.2,
+      "e2e_tps": 23.78,
+      "name": "off_code",
+      "ans_head": "```python\nimport time\nfrom collections import OrderedDict\nfrom typing import Any, Hashable, Optional\n\n\nclass TTLCache:\n "
+    },
+    {
+      "ptok": 53,
+      "ctok": 121,
+      "rtok": 53,
+      "ttft_s": 2.4431,
+      "wall_s": 5.2313,
+      "decode_tps": 43.4,
+      "e2e_tps": 23.13,
+      "name": "high_math",
+      "ans_head": "Average speed = total distance \u00f7 total time.\n\n- Outbound: 120 km \u00f7 60 km/h = 2 h\n- Return: 120 km \u00f7 40 km/h = 3 h\n- Tota"
+    },
+    {
+      "ptok": 56,
+      "ctok": 295,
+      "rtok": 148,
+      "ttft_s": 6.398,
+      "wall_s": 12.487,
+      "decode_tps": 48.45,
+      "e2e_tps": 23.62,
+      "name": "high_zh",
+      "ans_head": "\u5168\u7a0b\u5e73\u5747\u65f6\u901f\u662f **48 \u516c\u91cc/\u5c0f\u65f6**\u3002\n\n\u8ba1\u7b97\u8fc7\u7a0b\uff1a\n\n\u5e73\u5747\u901f\u5ea6 = \u603b\u8def\u7a0b \u00f7 \u603b\u65f6\u95f4\uff0c\u800c\u4e0d\u662f\u4e24\u4e2a\u901f\u5ea6\u7684\u7b80\u5355\u5e73\u5747\u3002\n\n- \u53bb\u7a0b\u65f6\u95f4\uff1a120 \u00f7 60 = 2 \u5c0f\u65f6\n- \u56de\u7a0b\u65f6\u95f4\uff1a120 \u00f7 40 = 3 \u5c0f\u65f6\n- \u603b\u8def\u7a0b\uff1a120 + "
+    },
+    {
+      "ptok": 53,
+      "ctok": 1024,
+      "rtok": 1024,
+      "ttft_s": 42.9438,
+      "wall_s": 42.9438,
+      "decode_tps": 23.85,
+      "e2e_tps": 23.85,
+      "name": "high_code",
+      "ans_head": ""
+    }
+  ],
+  "prefix_cache": [
+    {
+      "target_prefix": 8192,
+      "actual_ptok": 7272,
+      "cold_ttft_s": 4.6602,
+      "cold_prefill_tps": 1560.4,
+      "warm1_ttft_s": 0.3399,
+      "warm2_high_ttft_s": 2.4652,
+      "prefix_ttft_speedup": 13.71,
+      "warm1_decode_tps": 24.44,
+      "warm2_high_decode_tps": 67.39,
+      "code_recalled_cold": true,
+      "code_recalled_warm1": true,
+      "code_recalled_warm2": true
+    }
+  ]
+}

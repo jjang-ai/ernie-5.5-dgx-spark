@@ -1,0 +1,112 @@
+{
+  "label": "tp2_ar_v2_128k",
+  "base": "http://127.0.0.1:18000/v1",
+  "parity": [
+    {
+      "name": "math_high",
+      "think": true,
+      "ctok": 137,
+      "dt": 6.547,
+      "ttft": 3.843,
+      "decode_tps": 50.68,
+      "ans_head": "48 km/h.\n\nTotal distance is 240 km. Time for the outbound leg is 120/60 = 2 h, and for the return is 120/40 = 3 h, totaling 5 h. Average speed = 240/5 = 48 km/h"
+    },
+    {
+      "name": "algo_off",
+      "think": false,
+      "ctok": 25,
+      "dt": 1.334,
+      "ttft": 0.265,
+      "decode_tps": 23.38,
+      "ans_head": "Binary search halves the search space with each comparison, so the number of comparisons is logarithmic in the size of the input."
+    },
+    {
+      "name": "zh_high",
+      "think": true,
+      "ctok": 185,
+      "dt": 8.806,
+      "ttft": 4.331,
+      "decode_tps": 41.34,
+      "ans_head": "\u5168\u7a0b\u5e73\u5747\u65f6\u901f\u662f **48 \u516c\u91cc/\u5c0f\u65f6**\u3002\n\n\u8ba1\u7b97\u8fc7\u7a0b\uff1a\n- \u603b\u8def\u7a0b = 120 + 120 = 240 \u516c\u91cc\n- \u53bb\u7a0b\u8017\u65f6 = 120 \u00f7 60 = 2 \u5c0f\u65f6\n- \u56de\u7a0b\u8017\u65f6 = 120 \u00f7 40 = 3 \u5c0f\u65f6\n- \u603b\u8017\u65f6 = 2 + 3 = 5 \u5c0f\u65f6\n- \u5e73\u5747\u65f6\u901f = 240 \u00f7 5 = 48 \u516c\u91cc/\u5c0f\u65f6"
+    }
+  ],
+  "decode_batches": [
+    {
+      "concurrency": 1,
+      "wall_s": 5.939,
+      "total_ctok": 121,
+      "total_ptok": 64,
+      "agg_decode_tps": 20.38,
+      "mean_req_decode_tps": 21.55,
+      "avg_ttft_s": 0.323
+    },
+    {
+      "concurrency": 4,
+      "wall_s": 12.517,
+      "total_ctok": 426,
+      "total_ptok": 243,
+      "agg_decode_tps": 34.03,
+      "mean_req_decode_tps": 17.9,
+      "avg_ttft_s": 0.724
+    },
+    {
+      "concurrency": 8,
+      "wall_s": 16.993,
+      "total_ctok": 1031,
+      "total_ptok": 491,
+      "agg_decode_tps": 60.67,
+      "mean_req_decode_tps": 13.94,
+      "avg_ttft_s": 0.521
+    },
+    {
+      "concurrency": 16,
+      "wall_s": 23.683,
+      "total_ctok": 2484,
+      "total_ptok": 983,
+      "agg_decode_tps": 104.89,
+      "mean_req_decode_tps": 10.95,
+      "avg_ttft_s": 0.949
+    },
+    {
+      "concurrency": 32,
+      "wall_s": 28.722,
+      "total_ctok": 4829,
+      "total_ptok": 1967,
+      "agg_decode_tps": 168.13,
+      "mean_req_decode_tps": 9.4,
+      "avg_ttft_s": 1.518
+    },
+    {
+      "concurrency": 64,
+      "wall_s": 39.846,
+      "total_ctok": 9985,
+      "total_ptok": 3935,
+      "agg_decode_tps": 250.59,
+      "mean_req_decode_tps": 6.6,
+      "avg_ttft_s": 2.148
+    },
+    {
+      "concurrency": 128,
+      "wall_s": 54.835,
+      "total_ctok": 20471,
+      "total_ptok": 7872,
+      "agg_decode_tps": 373.32,
+      "mean_req_decode_tps": 4.69,
+      "avg_ttft_s": 3.46
+    }
+  ],
+  "prefill": [
+    {
+      "target_tok": 2048,
+      "actual_ptok": 2957,
+      "ttft_s": 2.2027,
+      "prefill_tps": 1342.4
+    },
+    {
+      "target_tok": 8192,
+      "actual_ptok": 11710,
+      "ttft_s": 7.4487,
+      "prefill_tps": 1572.1
+    }
+  ]
+}

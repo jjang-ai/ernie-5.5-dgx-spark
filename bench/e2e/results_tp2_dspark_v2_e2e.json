@@ -1,0 +1,85 @@
+{
+  "label": "tp2_dspark_v2_topk64",
+  "base": "http://127.0.0.1:18001/v1",
+  "parity": [
+    {
+      "name": "math_high",
+      "think": true,
+      "ctok": 127,
+      "dt": 2.692,
+      "ttft": 1.614,
+      "decode_tps": 117.79,
+      "ans_head": "48 km/h.\n\nTotal distance is 240 km. Time out = 120/60 = 2 h, time back = 120/40 = 3 h, total 5 h. 240/5 = 48."
+    },
+    {
+      "name": "algo_off",
+      "think": false,
+      "ctok": 25,
+      "dt": 1.066,
+      "ttft": 0.338,
+      "decode_tps": 34.33,
+      "ans_head": "Binary search halves the search space with each comparison, so the number of comparisons is logarithmic in the size of the input."
+    },
+    {
+      "name": "zh_high",
+      "think": true,
+      "ctok": 185,
+      "dt": 2.898,
+      "ttft": 1.698,
+      "decode_tps": 154.18,
+      "ans_head": "\u5168\u7a0b\u5e73\u5747\u65f6\u901f\u662f **48 \u516c\u91cc/\u5c0f\u65f6**\u3002\n\n\u8ba1\u7b97\u8fc7\u7a0b\uff1a\n- \u603b\u8def\u7a0b = 120 + 120 = 240 \u516c\u91cc\n- \u53bb\u7a0b\u8017\u65f6 = 120 \u00f7 60 = 2 \u5c0f\u65f6\n- \u56de\u7a0b\u8017\u65f6 = 120 \u00f7 40 = 3 \u5c0f\u65f6\n- \u603b\u8017\u65f6 = 2 + 3 = 5 \u5c0f\u65f6\n- \u5e73\u5747\u65f6\u901f = 240 \u00f7 5 = 48 \u516c\u91cc/\u5c0f\u65f6"
+    }
+  ],
+  "decode_batches": [
+    {
+      "concurrency": 1,
+      "wall_s": 11.013,
+      "total_ctok": 256,
+      "total_ptok": 64,
+      "agg_decode_tps": 23.25,
+      "mean_req_decode_tps": 23.83,
+      "avg_ttft_s": 0.269
+    },
+    {
+      "concurrency": 2,
+      "wall_s": 4.865,
+      "total_ctok": 105,
+      "total_ptok": 121,
+      "agg_decode_tps": 21.58,
+      "mean_req_decode_tps": 23.5,
+      "avg_ttft_s": 0.276
+    },
+    {
+      "concurrency": 4,
+      "wall_s": 8.831,
+      "total_ctok": 392,
+      "total_ptok": 243,
+      "agg_decode_tps": 44.39,
+      "mean_req_decode_tps": 23.43,
+      "avg_ttft_s": 0.402
+    },
+    {
+      "concurrency": 8,
+      "wall_s": 15.455,
+      "total_ctok": 977,
+      "total_ptok": 491,
+      "agg_decode_tps": 63.22,
+      "mean_req_decode_tps": 14.51,
+      "avg_ttft_s": 0.531
+    }
+  ],
+  "prefill": [
+    {
+      "target_tok": 2048,
+      "actual_ptok": 2957,
+      "ttft_s": 2.3856,
+      "prefill_tps": 1239.5
+    },
+    {
+      "target_tok": 8192,
+      "actual_ptok": 11709,
+      "ttft_s": 7.3538,
+      "prefill_tps": 1592.2
+    }
+  ]
+}
