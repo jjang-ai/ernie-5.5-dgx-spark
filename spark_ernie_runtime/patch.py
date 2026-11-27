@@ -2139,12 +2139,15 @@ def _patch_anthropic_and_api_compat() -> bool:
         pass
 
     # 2. Prevent Anthropic /v1/messages from merging inline system messages on ERNIE 5.5
+    #    and ensure thinking={"type": "disabled"} sets chat_template_kwargs["enable_thinking"]=False
+    #    so vllm_ernie._without_injected_enable_thinking never strips it back out.
     try:
         from vllm.entrypoints.anthropic import serving as anth_serving  # type: ignore
 
         anth_cls = getattr(anth_serving, "AnthropicServingMessages", None)
         if anth_cls is not None and not getattr(anth_cls, "_spark_ernie_anth_patched", False):
             orig_detect = anth_cls._detect_merge_inline_system
+            orig_handle_thinking = getattr(anth_cls, "_handle_thinking", None)
 
             @staticmethod
             def _detect_merge_inline_system_ernie(chat_template: str | None) -> bool:
@@ -2156,26 +2159,76 @@ def _patch_anthropic_and_api_compat() -> bool:
                 return orig_detect(chat_template)
 
             anth_cls._detect_merge_inline_system = _detect_merge_inline_system_ernie
+
+            if orig_handle_thinking is not None:
+                @classmethod
+                def _handle_thinking_ernie(
+                    cls,
+                    req,
+                    anthropic_request,
+                    disabled_thinking_effort="none",
+                ) -> None:
+                    orig_handle_thinking(req, anthropic_request, disabled_thinking_effort)
+                    thinking = getattr(anthropic_request, "thinking", None)
+                    if thinking is not None and getattr(thinking, "type", None) == "disabled":
+                        ck = dict(getattr(req, "chat_template_kwargs", None) or {})
+                        ck["enable_thinking"] = False
+                        ck.pop("reasoning_effort", None)
+                        req.chat_template_kwargs = ck
+                        req.reasoning_effort = None
+                    elif thinking is None and getattr(req, "reasoning_effort", None) is None:
+                        default_eff = os.environ.get("SPARK_DEFAULT_REASONING_EFFORT", "high").strip().lower()
+                        if default_eff in ("low", "medium", "high"):
+                            req.reasoning_effort = default_eff
+
+                anth_cls._handle_thinking = _handle_thinking_ernie
+
             anth_cls._spark_ernie_anth_patched = True
             patched_any = True
     except Exception:
         pass
 
-    # 3. Normalize reasoning_effort across Chat, Responses & Anthropic /v1/messages for ERNIE 5.5
+    # 3. Normalize reasoning_effort across Chat, Responses, Anthropic & Ernie5_5Renderer
+    #    (and default bare requests to SPARK_DEFAULT_REASONING_EFFORT="high").
+    _EFFORT_MAP = {
+        "minimal": "low",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "max": "high",
+        "xhigh": "high",
+    }
+    _DISABLE_EFFORTS = frozenset({"none", "off", "disabled", "false", "0"})
+
+    def _normalize_tk_dict(tk: dict[str, Any], raw_eff: Any = None) -> dict[str, Any]:
+        out = dict(tk or {})
+        eff = out.get("reasoning_effort", raw_eff)
+        if isinstance(eff, str):
+            eff_l = eff.strip().lower()
+            if eff_l in _DISABLE_EFFORTS:
+                out["enable_thinking"] = False
+                out.pop("reasoning_effort", None)
+                return out
+            if eff_l in _EFFORT_MAP:
+                out["reasoning_effort"] = _EFFORT_MAP[eff_l]
+                if "enable_thinking" not in out:
+                    out["enable_thinking"] = True
+                return out
+        if "enable_thinking" not in out and "reasoning_effort" not in out:
+            default_eff = os.environ.get("SPARK_DEFAULT_REASONING_EFFORT", "high").strip().lower()
+            if default_eff in _DISABLE_EFFORTS:
+                out["enable_thinking"] = False
+            elif default_eff in _EFFORT_MAP:
+                out["enable_thinking"] = True
+                out["reasoning_effort"] = _EFFORT_MAP[default_eff]
+        elif out.get("enable_thinking") is False:
+            out.pop("reasoning_effort", None)
+        return out
+
     try:
         import dataclasses
         from vllm.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest  # type: ignore
         from vllm.entrypoints.openai.responses.protocol import ResponsesRequest  # type: ignore
-
-        _EFFORT_MAP = {
-            "minimal": "low",
-            "low": "low",
-            "medium": "medium",
-            "high": "high",
-            "max": "high",
-            "xhigh": "high",
-        }
-        _DISABLE_EFFORTS = frozenset({"none", "off", "disabled", "false", "0"})
 
         for req_cls in (ChatCompletionRequest, ResponsesRequest):
             orig_build = req_cls.build_chat_params
@@ -2185,25 +2238,36 @@ def _patch_anthropic_and_api_compat() -> bool:
             def _make_wrapper(fn):
                 def _wrapped_build_chat_params(self, *args, **kwargs):
                     params = fn(self, *args, **kwargs)
-                    tk = dict(params.chat_template_kwargs or {})
-                    raw_eff = tk.get("reasoning_effort", getattr(self, "reasoning_effort", None))
+                    raw_eff = getattr(self, "reasoning_effort", None)
                     if raw_eff is None and hasattr(self, "reasoning") and self.reasoning is not None:
                         raw_eff = getattr(self.reasoning, "effort", None)
-                    if isinstance(raw_eff, str):
-                        eff_l = raw_eff.strip().lower()
-                        if eff_l in _DISABLE_EFFORTS:
-                            tk["enable_thinking"] = False
-                            tk.pop("reasoning_effort", None)
-                            return dataclasses.replace(params, chat_template_kwargs=tk)
-                        if eff_l in _EFFORT_MAP and _EFFORT_MAP[eff_l] != raw_eff:
-                            tk["reasoning_effort"] = _EFFORT_MAP[eff_l]
-                            return dataclasses.replace(params, chat_template_kwargs=tk)
-                    return params
+                    tk = _normalize_tk_dict(params.chat_template_kwargs or {}, raw_eff)
+                    return dataclasses.replace(params, chat_template_kwargs=tk)
 
                 _wrapped_build_chat_params._spark_ernie_effort_patched = True  # type: ignore[attr-defined]
                 return _wrapped_build_chat_params
 
             req_cls.build_chat_params = _make_wrapper(orig_build)
+            patched_any = True
+    except Exception:
+        pass
+
+    # Also patch Ernie5_5Renderer._render_ids directly so normalization runs AFTER
+    # vllm_ernie.models.ernie5_5.patches._without_injected_enable_thinking!
+    try:
+        import dataclasses
+        from vllm_ernie.models.ernie5_5 import renderer as ernie_renderer  # type: ignore
+
+        r_cls = getattr(ernie_renderer, "Ernie5_5Renderer", None)
+        if r_cls is not None and not getattr(r_cls, "_spark_effort_render_patched", False):
+            orig_render_ids = r_cls._render_ids
+
+            def _patched_render_ids(self, conversation, params):
+                tk = _normalize_tk_dict(getattr(params, "chat_template_kwargs", None) or {})
+                return orig_render_ids(self, conversation, dataclasses.replace(params, chat_template_kwargs=tk))
+
+            r_cls._render_ids = _patched_render_ids
+            r_cls._spark_effort_render_patched = True
             patched_any = True
     except Exception:
         pass
