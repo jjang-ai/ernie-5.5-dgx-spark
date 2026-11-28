@@ -330,7 +330,7 @@ def cmd_profiles(_: argparse.Namespace) -> int:
     print("Built-in 2x & 4x DGX Spark profiles:")
     for name, p in sorted(PROFILES.items()):
         print(
-            f"  {name:20s} -> mode={p['mode']:10s} ctx={int(p['SPARK_MAX_MODEL_LEN']):>9,d} "
+            f"  {name:24s} -> mode={p['mode']:16s} ctx={int(p['SPARK_MAX_MODEL_LEN']):>9,d} "
             f"dspark={'ON' if 'dspark' in p['mode'] else 'OFF':3s} "
             f"kv_pack={'ON' if p.get('SPARK_PATCH_KV_PACK') == '1' else 'OFF'}"
         )
@@ -363,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # init
     ip = sub.add_parser("init", help="Configure default model path, profile, port, reasoning effort, and API key")
-    ip.add_argument("--model", help="HF repo ID or local path to ERNIE-5.5-Flash-Preview MXFP4 weights")
+    ip.add_argument("--model", help="HF repo ID or local path to ERNIE-5.5-Flash-Preview (MXFP4 or W4A16_NVFP4) weights")
     ip.add_argument("--served-model-name", help="OpenAI served model name (default: ernie55)")
     ip.add_argument("--profile", choices=["auto", *sorted(PROFILES), *sorted(PROFILE_ALIASES)])
     ip.add_argument("--port", type=int)
@@ -428,7 +428,7 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--api-key", help="Override Bearer API key")
     cp.set_defaults(func=cmd_chat)
 
-    tp = sub.add_parser("test", help="Run 4-check live smoke test (chat high, responses, VRAM prefix cache, coding speed)")
+    tp = sub.add_parser("test", help="Run 5-check live smoke test (chat high, responses, VRAM prefix cache, coding speed, Anthropic /v1/messages)")
     tp.add_argument("--url", help="OpenAI API base URL")
     tp.add_argument("--model", help="Served model name")
     tp.add_argument("--api-key", help="Override Bearer API key")

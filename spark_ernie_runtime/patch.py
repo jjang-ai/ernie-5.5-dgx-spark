@@ -377,27 +377,39 @@ def _patch_dspark_adaptive_verification() -> bool:
                     dc, vc = self.cost_tables
                     if len(vc) > 2:
                         # Startup dummy_run uses identical tokens -> all M tokens hit the same
-                        # 10 experts, giving a fake flat verify_ms[1..8] = [22.8..25.9].
+                        # 10 experts, giving a fake flat verify_ms[1..M].
                         # In reality ERNIE 5.5 (E=512, k=10, 42 MoE layers, 7.08 MB/expert)
                         # activates E_unique(M) = E * (1 - (1 - k/E)^M) unique experts!
+                        # Calibrate across the FULL table (up to M=512+) so batched B=16..64
+                        # verification sees the true 512-expert coupon-collector DRAM wall!
                         E = 512.0
                         k = 10.0
-                        # Effective GB10 LPDDR5X MoE bandwidth (GB/s); tuned so B=1..16
-                        # prose trims wasted tail drafts while B=32 keeps full batching.
-                        bw_gb_s = float(os.environ.get("SPARK_DSPARK_MOE_BW_GBS", "250.0"))
+                        bw_gb_s = float(os.environ.get("SPARK_DSPARK_MOE_BW_GBS", "240.0"))
+                        tok_slope_ms = float(
+                            os.environ.get(
+                                "SPARK_DSPARK_TOK_SLOPE_MS",
+                                "0.015" if tp >= 4 else "0.025",
+                            )
+                        )
                         ms_per_extra_expert = (42.0 * 7.08 / float(tp)) / bw_gb_s
                         base_v1 = float(vc[1])
                         vc_new = np.array(vc, dtype=np.float64, copy=True)
-                        cap_m = min(len(vc_new), 65)
-                        for m in range(2, cap_m):
+                        for m in range(2, len(vc_new)):
                             e_uniq = E * (1.0 - ((E - k) / E) ** m)
-                            moe_est = base_v1 + max(0.0, e_uniq - k) * ms_per_extra_expert
+                            moe_est = (
+                                base_v1
+                                + max(0.0, e_uniq - k) * ms_per_extra_expert
+                                + (m - 1) * tok_slope_ms
+                            )
                             if moe_est > vc_new[m]:
                                 vc_new[m] = moe_est
                         self.cost_tables = (dc, vc_new)
                         _log(
-                            f"calibrated true ERNIE 5.5 512-expert MoE verify cost curve (TP={tp}): "
-                            f"verify_ms[1..8]={[round(float(x), 1) for x in vc_new[1:9]]}"
+                            f"calibrated full ERNIE 5.5 512-expert MoE verify cost curve (TP={tp}, bw={bw_gb_s:.0f}GB/s): "
+                            f"verify_ms[1..8]={[round(float(x), 1) for x in vc_new[1:9]]} "
+                            f"m32={float(vc_new[min(32, len(vc_new)-1)]):.1f} "
+                            f"m64={float(vc_new[min(64, len(vc_new)-1)]):.1f} "
+                            f"m128={float(vc_new[min(128, len(vc_new)-1)]):.1f}"
                         )
                 except Exception as exc:
                     _log(f"MoE cost curve calibration skipped ({exc!r})")
@@ -661,20 +673,27 @@ def _patch_dspark_vocab_parallel_greedy() -> bool:
         if _env_flag("SPARK_PACKED_BF16_LM_HEAD", "0") and x.is_cuda and x.dtype == torch.bfloat16:
             runner = getattr(lm_head, "_spark_packed_draft_bf16", None)
             if runner is None and not torch.cuda.is_current_stream_capturing():
-                if w.is_cuda and w.dtype == torch.bfloat16 and w.shape[0] % 32 == 0 and w.shape[1] % 256 == 0 and w.abs().max().item() > 0:
+                shared_pk = getattr(lm_head, "_spark_packed_pk", None)
+                fp32_runner = getattr(lm_head, f"_spark_packed_lm_{torch.float32}", None)
+                pk = shared_pk or (fp32_runner.packed if (fp32_runner and hasattr(fp32_runner, "packed")) else None)
+                if pk is not None or (w.is_cuda and w.dtype == torch.bfloat16 and w.ndim == 2 and w.shape[0] % 32 == 0 and w.shape[1] % 256 == 0 and w.abs().max().item() > 0):
                     try:
                         from kernels.lm_head.packed_bf16_lm_head import PackedBF16VocabRunner, pack_bf16_exact
-                        # Share the already-packed target LM head weight (ZERO extra VRAM!) if available
-                        fp32_runner = getattr(lm_head, f"_spark_packed_lm_{torch.float32}", None)
-                        pk = fp32_runner.packed if fp32_runner else pack_bf16_exact(w.detach(), verify=False)
+                        if pk is None:
+                            pk = pack_bf16_exact(w.detach(), verify=False)
+                            lm_head._spark_packed_pk = pk
+                            if _env_flag("SPARK_PACKED_BF16_FREE_ORIG", "0") and w.numel() > 0:
+                                freed_mb = w.numel() * 2 / (1024 ** 2)
+                                w.data = torch.empty((0,), dtype=w.dtype, device=w.device)
+                                _log(f"freed raw BF16 lm_head.weight ({freed_mb:.0f} MiB reclaimed, shared 12-bit active)")
                         runner = PackedBF16VocabRunner(pk, out_dtype=torch.bfloat16)
                         lm_head._spark_packed_draft_bf16 = runner
-                        _log(f"activated shared 12-bit packed BF16 draft LM head [{w.shape[0]}x{w.shape[1]}] -> bf16 (zero extra VRAM)")
+                        _log(f"activated shared 12-bit packed BF16 draft LM head [{pk.values.shape[0]}x{pk.in_features}] -> bf16 (zero extra VRAM)")
                     except Exception as exc:
                         _log(f"packed draft LM head fallback ({exc!r})")
                         lm_head._spark_packed_draft_bf16 = False
                         runner = False
-            if runner and x.numel() // x.shape[-1] <= 256:
+            if runner and (x.numel() // x.shape[-1] <= 256 or w.numel() == 0):
                 flat = x.reshape(-1, x.shape[-1])
                 return runner(flat).reshape(*x.shape[:-1], -1)
         return F.linear(x, w)
@@ -1095,37 +1114,41 @@ def _patch_packed_bf16_lm_head() -> bool:
                 runner = getattr(lm_head, key, None)
                 if runner is None and not torch.cuda.is_current_stream_capturing():
                     w = getattr(lm_head, "weight", None)
-                    if (
+                    shared_pk = getattr(lm_head, "_spark_packed_pk", None)
+                    draft_runner = getattr(lm_head, "_spark_packed_draft_bf16", None)
+                    pk = shared_pk or (draft_runner.packed if (draft_runner and hasattr(draft_runner, "packed")) else None)
+                    can_pack = pk is not None or (
                         w is not None
                         and w.is_cuda
                         and w.dtype == torch.bfloat16
                         and w.ndim == 2
                         and w.shape[0] % 32 == 0
                         and w.shape[1] % 256 == 0
-                    ):
-                        # Wait until weights are actually loaded (skip all-zero init sanity passes)
-                        if w.abs().max().item() > 0:
-                            try:
-                                # Share already-packed weight if draft LM head packed it first (saves 618 MB on TP=2!)
-                                draft_runner = getattr(lm_head, "_spark_packed_draft_bf16", None)
-                                pk = (
-                                    draft_runner.packed
-                                    if (draft_runner and hasattr(draft_runner, "packed"))
-                                    else pack_bf16_exact(w.detach(), verify=False)
-                                )
-                                runner = PackedBF16VocabRunner(pk, out_dtype=out_dtype)
-                                setattr(lm_head, key, runner)
-                                shared_tag = " [shared w/ draft, 0 extra VRAM]" if (draft_runner and hasattr(draft_runner, "packed")) else ""
-                                _log(
-                                    f"activated lossless 12-bit packed BF16 LM head "
-                                    f"[{w.shape[0]}x{w.shape[1]}] -> {out_dtype} "
-                                    f"(exc={pk.num_exceptions}, base={pk.exponent_base}){shared_tag}"
-                                )
-                            except Exception as exc:
-                                _log(f"packed_bf16_lm_head build failed, falling back ({exc!r})")
-                                setattr(lm_head, key, False)
-                                runner = False
-                if runner and hidden_states.numel() // hidden_states.shape[-1] <= 256:
+                        and w.abs().max().item() > 0
+                    )
+                    if can_pack:
+                        try:
+                            was_shared = pk is not None
+                            if pk is None:
+                                pk = pack_bf16_exact(w.detach(), verify=False)
+                                lm_head._spark_packed_pk = pk
+                                if _env_flag("SPARK_PACKED_BF16_FREE_ORIG", "0") and w.numel() > 0:
+                                    freed_mb = w.numel() * 2 / (1024 ** 2)
+                                    w.data = torch.empty((0,), dtype=w.dtype, device=w.device)
+                                    _log(f"freed raw BF16 lm_head.weight ({freed_mb:.0f} MiB reclaimed, shared 12-bit active)")
+                            runner = PackedBF16VocabRunner(pk, out_dtype=out_dtype)
+                            setattr(lm_head, key, runner)
+                            shared_tag = " [shared w/ draft, 0 extra VRAM]" if was_shared else ""
+                            _log(
+                                f"activated lossless 12-bit packed BF16 LM head "
+                                f"[{pk.values.shape[0]}x{pk.in_features}] -> {out_dtype} "
+                                f"(exc={pk.num_exceptions}, base={pk.exponent_base}){shared_tag}"
+                            )
+                        except Exception as exc:
+                            _log(f"packed_bf16_lm_head build failed, falling back ({exc!r})")
+                            setattr(lm_head, key, False)
+                            runner = False
+                if runner and (hidden_states.numel() // hidden_states.shape[-1] <= 256 or (getattr(lm_head, "weight", None) is not None and lm_head.weight.numel() == 0)):
                     flat = hidden_states.reshape(-1, hidden_states.shape[-1])
                     logits = runner(flat)
                     return logits.reshape(*hidden_states.shape[:-1], -1)
@@ -1291,11 +1314,12 @@ def _patch_fc2_latent_tp() -> bool:
         tp = get_tensor_model_parallel_world_size()
         latent_size = config.moe_latent_size
         orig_w = getattr(self.fc2_latent_proj, "weight", None)
+        allow_bf16 = _env_flag("SPARK_PATCH_FC2_LATENT_TP_BF16", "0")
         if (
             tp > 1
             and latent_size % (tp * 128) == 0
             and orig_w is not None
-            and orig_w.dtype == torch.float8_e4m3fn
+            and (orig_w.dtype == torch.float8_e4m3fn or (allow_bf16 and orig_w.dtype == torch.bfloat16))
         ):
             xform = getattr(self.experts, "routed_output_transform", None)
             if xform is not None:
@@ -1344,7 +1368,12 @@ def _patch_fc2_latent_tp() -> bool:
 
 
 def _patch_fc1_latent_tp() -> bool:
-    """Column-shard MoE fc1_latent_proj across TP ranks (gather_output=True) to cut decode DRAM & VRAM 2x-4x."""
+    """Column-shard MoE fc1_latent_proj across TP ranks (gather_output=True) to cut decode DRAM & VRAM 2x-4x.
+
+    Sets `self.aux_stream = None` on the patched MoE block so the TP all_gather
+    always executes in deterministic collective order on the main compute stream
+    (required for CUDA-graph safety with sparknet / NCCL).
+    """
     try:
         from vllm.distributed import get_tensor_model_parallel_world_size
         from vllm.model_executor.layers.linear import ColumnParallelLinear
@@ -1368,9 +1397,435 @@ def _patch_fc1_latent_tp() -> bool:
                 quant_config=quant_config,
                 prefix=f"{prefix}.fc1_latent_proj",
             )
+            self.aux_stream = None
 
     emoe.Ernie5_5MoE.__init__ = _patched_moe_init
-    _log("installed column-sharded fc1_latent_proj across TP ranks (2x-4x less fc1 decode DRAM & VRAM)")
+    _log("installed column-sharded fc1_latent_proj across TP ranks (2x-4x less fc1 decode DRAM & VRAM, main-stream AG)")
+    return True
+
+
+def _patch_nvfp4_fp8_non_experts() -> bool:
+    """Auto-convert BF16 non-expert weights on W4A16_NVFP4 checkpoints to SM12.1 block-128 FP8 at load time.
+
+    On W4A16_NVFP4 ERNIE 5.5 checkpoints, 96.8% of parameters (routed MoE experts) are
+    group-16 NVFP4 while the remaining ~3.2% non-expert projections (HCA/DSA attention,
+    wo_a, L0 dense MLP, fc1/fc2 latent projections, shared experts, and DSpark draft
+    attention/MLP/main_proj) are stored in BF16.
+
+    Converting eligible 128x128-aligned BF16 non-expert weights in-place during
+    `UnquantizedLinearMethod.process_weights_after_loading` (~1.5s on GPU, zero checkpoint
+    changes):
+      - Regular aligned 2D linears -> `HummingFP8` (222 GB/s decode, 180 TFLOPS prefill,
+        -50% non-expert VRAM, cos=0.99965, 100% torch.compile + FULL_AND_PIECEWISE CG safe).
+      - HCA `wo_a` (`is_bmm=True`) -> DeepGEMM block-128 UE8M0 FP8 `fp8_einsum` (activates
+        Wave-5 fused `vha_v_add_inv_rope_fp8_quant` + L2-tiled 180 TFLOPS `fp8_einsum` +
+        2-chunk RDMA pipeline, -50% wo_a VRAM, cos=0.9990).
+      - Reclaims ~4.5 GiB/Spark on 2x (unlocking native 1M context on 2x NVFP4 with >10 GiB
+        headroom!) and ~2.25 GiB/Spark on 4x while keeping all 96.8% routed experts in
+        higher-precision group-16 NVFP4 Marlin and `lm_head`/`markov_w2` in lossless 12-bit BF16.
+
+    Auto-detects `modelopt_fp4` / NVFP4 checkpoints (no-op on MXFP4/FP8 checkpoints).
+    Set `SPARK_NVFP4_FP8_NON_EXPERTS=0` to keep 100% lossless BF16 / 12-bit packed non-experts.
+    """
+    try:
+        import torch
+        from vllm.config import get_current_vllm_config
+        from vllm.model_executor.layers.linear import UnquantizedLinearMethod
+        from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+            deepgemm_post_process_fp8_weight_block,
+        )
+        from vllm.model_executor.kernels.linear.scaled_mm.humming import (
+            apply_humming_linear,
+            convert_linear_layer_to_humming_standard,
+            create_humming_locks,
+            get_humming_linear_compute_config,
+            prepare_humming_linear_layer_config,
+        )
+        from vllm.utils.humming import dtypes as humming_dtypes
+    except Exception as exc:
+        _log(f"skip nvfp4_fp8_non_experts ({exc!r})")
+        return False
+
+    orig_process = UnquantizedLinearMethod.process_weights_after_loading
+    orig_apply = UnquantizedLinearMethod.apply
+    force_mode = os.environ.get("SPARK_NVFP4_FP8_NON_EXPERTS", "1").strip().lower() == "force"
+    # Keep HCA `wo_a` lossless BF16 (or 12-bit packed BF16) by default — DeepGEMM `fp8_einsum`
+    # on dynamically converted `wo_a` skips upstream FP8 kernel warmup and can IMA on FULL CG replay.
+    convert_wo_a = _env_flag("SPARK_NVFP4_FP8_WO_A", "0")
+    excluded_suffixes = (
+        ".kv_b_proj",
+        ".fused_wkv_wgate",
+        ".linear_wkv",
+        ".linear_wgate",
+        ".linear_gate",
+        ".weights_proj",
+        ".wk_weights_proj",
+        ".wk",
+        "lm_head",
+        "embed_tokens",
+        "markov_w1",
+        "markov_w2",
+        "confidence_head",
+    )
+    humming_qcfg = {
+        "quant_method": "humming",
+        "dtype": "float8e4m3",
+        "scale_dtype": humming_dtypes.DataType.from_torch_dtype(torch.float32),
+        "weight_scale_type": "block",
+        "weight_scale_group_size_n": 128,
+        "weight_scale_group_size": 128,
+    }
+    compute_cfg_holder: list = []
+    stats = {"humming_layers": 0, "wo_a_layers": 0, "saved_bytes": 0, "is_nvfp4": None}
+
+    def _is_nvfp4_active() -> bool:
+        if force_mode:
+            return True
+        cached = stats["is_nvfp4"]
+        if cached is not None:
+            return cached
+        try:
+            vcfg = get_current_vllm_config()
+            qcfg = getattr(vcfg, "quant_config", None)
+            qname = type(qcfg).__name__.lower() if qcfg is not None else ""
+            qmethod = str(getattr(qcfg, "get_name", lambda: "")()).lower()
+            is_fp4 = ("nvfp4" in qname) or ("modelopt_fp4" in qmethod) or ("fp4" in qname and "mxfp4" not in qname)
+        except Exception:
+            is_fp4 = False
+        stats["is_nvfp4"] = is_fp4
+        return is_fp4
+
+    @torch.no_grad()
+    def _quantize_bf16_block128(w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        N, K = int(w.shape[0]), int(w.shape[1])
+        w_f = w.detach().float().view(N // 128, 128, K // 128, 128)
+        s_inv = (w_f.abs().amax(dim=(1, 3)).clamp(min=1e-12) / 448.0).to(torch.float32).contiguous()
+        w_q = (
+            (w_f / s_inv[:, None, :, None])
+            .clamp(-448.0, 448.0)
+            .to(torch.float8_e4m3fn)
+            .reshape(N, K)
+            .contiguous()
+        )
+        return w_q, s_inv
+
+    def _patched_process(self, layer):
+        orig_process(self, layer)
+        if not _is_nvfp4_active():
+            return
+        w = getattr(layer, "weight", None)
+        bias = getattr(layer, "bias", None)
+        prefix = getattr(layer, "prefix", "") or ""
+        if (
+            bias is not None
+            or getattr(layer, "has_bias", False)
+            or w is None
+            or not w.is_cuda
+            or w.dtype != torch.bfloat16
+            or w.ndim != 2
+        ):
+            return
+        if any(prefix.endswith(sfx) or sfx in prefix for sfx in excluded_suffixes):
+            return
+        N, K = int(w.shape[0]), int(w.shape[1])
+        if N < 128 or K < 128 or (N % 128 != 0) or (K % 128 != 0):
+            return
+
+        # 1. HCA grouped output projection `wo_a` -> DeepGEMM block-128 UE8M0 FP8 `fp8_einsum`
+        if getattr(layer, "is_bmm", False):
+            if not (convert_wo_a and prefix.endswith(".wo_a")):
+                return
+            g = int(getattr(layer, "bmm_batch_size", 0))
+            if g <= 0 or (N % g != 0) or ((N // g) % 128 != 0):
+                return
+            try:
+                orig_b = w.numel() * 2
+                w_q, s_inv = _quantize_bf16_block128(w)
+                dg_w, dg_s = deepgemm_post_process_fp8_weight_block(
+                    wq=w_q,
+                    ws=s_inv,
+                    quant_block_shape=(128, 128),
+                    use_e8m0=True,
+                    is_bmm=True,
+                    bmm_batch_size=g,
+                )
+                layer.weight = torch.nn.Parameter(dg_w, requires_grad=False)
+                layer.weight_scale_inv = torch.nn.Parameter(dg_s, requires_grad=False)
+                new_b = dg_w.numel() * dg_w.element_size() + dg_s.numel() * dg_s.element_size()
+                stats["wo_a_layers"] += 1
+                stats["saved_bytes"] += max(0, orig_b - new_b)
+                if (stats["humming_layers"] + stats["wo_a_layers"]) % 40 == 0:
+                    torch.cuda.empty_cache()
+            except Exception as exc:
+                _log(f"nvfp4_fp8_non_experts wo_a fallback on {prefix} ({exc!r})")
+            return
+
+        # 2. Regular aligned 2D non-expert linears -> HummingFP8 (222 GB/s decode, 180 TFLOPS prefill)
+        part_sizes = getattr(layer, "output_partition_sizes", None)
+        if part_sizes is None:
+            return
+        if sum(part_sizes) != N or any(sz % 128 != 0 for sz in part_sizes):
+            return
+        in_part = (
+            layer.input_size_per_partition
+            if hasattr(layer, "input_size_per_partition")
+            else getattr(layer, "input_size", None)
+        )
+        if in_part != K:
+            return
+        try:
+            orig_b = w.numel() * 2
+            w_q, s_inv = _quantize_bf16_block128(w)
+            p_w = torch.nn.Parameter(w_q, requires_grad=False)
+            p_w.output_dim = 0
+            p_w.input_dim = 1
+            p_s = torch.nn.Parameter(s_inv, requires_grad=False)
+            p_s.output_dim = 0
+            p_s.input_dim = 1
+            layer.weight = p_w
+            layer.weight_scale_inv = p_s
+            convert_linear_layer_to_humming_standard(
+                layer=layer,
+                name_map={"weight": "weight", "weight_scale": "weight_scale_inv"},
+            )
+            lcfg = prepare_humming_linear_layer_config(layer, humming_qcfg)
+            if not compute_cfg_holder:
+                compute_cfg_holder.append(get_humming_linear_compute_config())
+            # Allocate dedicated per-layer Stream-K locks (matches stock HummingFP8)
+            # so concurrent streams (e.g. HCA stream 0 q_b_proj + aux_stream o_gate)
+            # never race on shared atomic locks!
+            locks = create_humming_locks(p_w.device)
+            layer._spark_humming_lcfg = lcfg
+            layer._spark_humming_ccfg = compute_cfg_holder[0]
+            layer._spark_humming_locks = locks
+            new_b = sum(p.numel() * p.element_size() for p in layer.parameters(recurse=False))
+            stats["humming_layers"] += 1
+            stats["saved_bytes"] += max(0, orig_b - new_b)
+            tot = stats["humming_layers"] + stats["wo_a_layers"]
+            if tot % 40 == 0:
+                torch.cuda.empty_cache()
+            if tot in (1, 100, 200, 300, 350, 400, 450):
+                _log(
+                    f"nvfp4_fp8_non_experts: {stats['humming_layers']} HummingFP8 + "
+                    f"{stats['wo_a_layers']} wo_a fp8_einsum converted "
+                    f"(saved={stats['saved_bytes']/1024**3:.2f} GiB/GPU)"
+                )
+        except Exception as exc:
+            _log(f"nvfp4_fp8_non_experts fallback on {prefix or (N, K)} ({exc!r})")
+
+    def _patched_apply(self, layer, x, bias=None):
+        lcfg = getattr(layer, "_spark_humming_lcfg", None)
+        if lcfg is not None and bias is None and x.is_cuda and x.dtype == torch.bfloat16:
+            return apply_humming_linear(
+                layer,
+                x,
+                skip_bias_add=True,
+                layer_config=lcfg,
+                compute_config=layer._spark_humming_ccfg,
+                locks=layer._spark_humming_locks,
+            )
+        return orig_apply(self, layer, x, bias)
+
+    UnquantizedLinearMethod.process_weights_after_loading = _patched_process
+    UnquantizedLinearMethod.apply = _patched_apply
+    _log(
+        f"installed auto-detect NVFP4 -> SM12.1 block-128 HummingFP8 + wo_a fp8_einsum "
+        f"non-expert converter (wo_a={convert_wo_a}, force={force_mode})"
+    )
+    return True
+
+
+def _patch_packed_bf16_linears() -> bool:
+    """Lossless 12-bit packed BF16 across ALL large BF16 non-expert linears (0 bit loss, 1.14x-1.35x decode, -25% VRAM!).
+
+    Packs eligible BF16 weights inside `UnquantizedLinearMethod.process_weights_after_loading`
+    (AFTER weight load and BEFORE `determine_available_memory` & `torch.compile`!) and
+    dispatches via a single `torch.library.custom_op` (`spark_ernie::packed12_bf16_linear`):
+      - ZERO Dynamo graph breaks, ZERO recompiles across M=1..8192, 100% FULL_AND_PIECEWISE CG safe!
+      - M <= 4 (or M <= 8 when K <= 512): pure-CUDA smem 12-bit GEMV
+      - M <= 64: shared runtime-base TileLang SM12.1 12-bit Tensor-Core kernel
+      - M > 64: cuBLAS BF16 (orig weight when free_orig=0, or bit-exact 193 GB/s CUDA unpack
+        when SPARK_PACKED_BF16_FREE_ORIG=1, reclaiming ~2.2 GiB/Spark before KV sizing!).
+    """
+    try:
+        import torch
+        from vllm.model_executor.layers.linear import UnquantizedLinearMethod
+        from kernels.lm_head.packed_bf16_lm_head import pack_bf16_exact
+        from kernels.linear.packed_bf16_linear import (
+            _load_cuda_ext,
+            get_packed_linear_tl_kernel,
+            get_packed_wo_a_tl_kernel,
+        )
+    except Exception as exc:
+        _log(f"skip packed_bf16_linears ({exc!r})")
+        return False
+
+    orig_process = UnquantizedLinearMethod.process_weights_after_loading
+    orig_apply = UnquantizedLinearMethod.apply
+    min_numel = int(os.environ.get("SPARK_PACKED_BF16_MIN_NUMEL", "2000000"))
+    max_m = int(os.environ.get("SPARK_PACKED_BF16_MAX_M", "64"))
+    free_orig = _env_flag("SPARK_PACKED_BF16_FREE_ORIG", "0")
+    stats = {"packed_layers": 0, "freed_bytes": 0, "orig_bytes": 0}
+
+    def _patched_process(self, layer):
+        orig_process(self, layer)
+        w = getattr(layer, "weight", None)
+        bias = getattr(layer, "bias", None)
+        prefix = getattr(layer, "prefix", "") or ""
+        if (
+            bias is None
+            and w is not None
+            and w.is_cuda
+            and w.dtype == torch.bfloat16
+            and w.ndim == 2
+            and w.numel() >= min_numel
+            and w.shape[0] % 32 == 0
+            and w.shape[1] % 128 == 0
+            and not prefix.endswith((".kv_b_proj", ".fused_wkv_wgate"))
+            and (not getattr(layer, "is_bmm", False) or prefix.endswith(".wo_a"))
+        ):
+            try:
+                is_wo_a = prefix.endswith(".wo_a")
+                N, K = int(w.shape[0]), int(w.shape[1])
+                pk = pack_bf16_exact(w.detach(), verify=False)
+                # Pre-compile / fetch shared CUDA & TileLang kernels OUTSIDE CUDA-graph capture!
+                _load_cuda_ext()
+                if not is_wo_a:
+                    for bm in (16, 32, 64):
+                        get_packed_linear_tl_kernel(N, K, block_M=bm, out_dtype="bfloat16")
+                else:
+                    # Pre-compile batched 3D TileLang kernel for HCA wo_a (o_rank=1024 on ERNIE 5.5)
+                    o_r = 1024 if (N % 1024 == 0) else (512 if N % 512 == 0 else N)
+                    n_g = N // o_r
+                    for bm in (16, 32, 64):
+                        get_packed_wo_a_tl_kernel(n_g, o_r, K, block_M=bm)
+                layer.register_buffer("_spark_p12_values", pk.values, persistent=False)
+                layer.register_buffer("_spark_p12_exc_rows", pk.exception_rows, persistent=False)
+                layer.register_buffer("_spark_p12_exc_entries", pk.exception_entries, persistent=False)
+                layer.register_buffer("_spark_p12_row_offsets", pk.row_offsets, persistent=False)
+                layer._spark_p12_exp_base = int(pk.exponent_base)
+                layer._spark_p12_gemv_m = 8
+                layer._spark_p12_is_wo_a = is_wo_a
+                orig_b = w.numel() * w.element_size()
+                pk_b = (
+                    pk.values.numel()
+                    + pk.exception_rows.numel() * 4
+                    + pk.exception_entries.numel() * 4
+                    + pk.row_offsets.numel() * 4
+                )
+                stats["packed_layers"] += 1
+                stats["orig_bytes"] += orig_b
+                if free_orig:
+                    w.data = torch.empty((0,), dtype=torch.bfloat16, device=w.device)
+                    stats["freed_bytes"] += orig_b - pk_b
+                    if stats["packed_layers"] % 50 == 0:
+                        torch.cuda.empty_cache()
+                if stats["packed_layers"] in (1, 10, 50, 100, 200, 300, 400):
+                    _log(
+                        f"packed_bf16_linears: {stats['packed_layers']} layers packed "
+                        f"(orig={stats['orig_bytes']/1024**3:.2f} GiB, "
+                        f"net_saved={stats['freed_bytes']/1024**3:.2f} GiB, free_orig={free_orig})"
+                    )
+            except Exception as exc:
+                _log(f"packed_bf16_linears fallback on {prefix or tuple(w.shape)} ({exc!r})")
+
+    def _patched_apply(self, layer, x, bias=None):
+        if (
+            bias is None
+            and hasattr(layer, "_spark_p12_values")
+            and not getattr(layer, "_spark_p12_is_wo_a", False)
+            and x.is_cuda
+            and x.dtype == torch.bfloat16
+        ):
+            return torch.ops.spark_ernie.packed12_bf16_linear(
+                x,
+                layer._spark_p12_values,
+                layer._spark_p12_exc_rows,
+                layer._spark_p12_exc_entries,
+                layer._spark_p12_row_offsets,
+                layer.weight,
+                layer._spark_p12_exp_base,
+                layer._spark_p12_gemv_m,
+                max_m,
+            )
+        return orig_apply(self, layer, x, bias)
+
+    UnquantizedLinearMethod.process_weights_after_loading = _patched_process
+    UnquantizedLinearMethod.apply = _patched_apply
+    _log(
+        f"installed lossless 12-bit packed BF16 non-expert linear hook "
+        f"(process_weights_after_loading + custom_op, min_numel={min_numel:,d}, "
+        f"max_m={max_m}, free_orig={free_orig})"
+    )
+    return True
+
+
+def _patch_humming_nvfp4_sm121() -> bool:
+    """Fix Humming SM12.1 (GB10) NVFP4 small-M MoE heuristics (3.4x faster M=1, 2.0x faster M=4, 1.35x faster 8K vs Marlin!).
+
+    Stock Humming SM12.1 heuristics pick `use_tma=False, block_k=64, use_stream_k=True`
+    at M=1 (0.676ms) and `block_n=256, block_k=64, num_stages=5` at M=2..184 (0.645ms at M=4).
+    Switching the small-M indexed MoE entry (M <= 1840) on SM12.1 NVFP4 to
+    `block_shape=(16, 128, 128), warp_shape=(16, 32, 64), num_stages=3, use_stream_k=False, use_tma=True`
+    drops EP=4 M=1 from 0.676ms -> 0.196ms and M=4 from 0.645ms -> 0.323ms while preserving
+    Humming's 10.12ms 8K prefill (1.35x faster than Marlin's 13.62ms, cos=0.99999!).
+    """
+    try:
+        import json
+        from vllm.model_executor.layers.fused_moe.experts import fused_humming_moe as fhm
+    except Exception as exc:
+        _log(f"skip humming_nvfp4_sm121 ({exc!r})")
+        return False
+
+    cls = fhm.HummingExpertsBase
+    orig_init_hm = cls.init_humming_moe
+
+    def _patched_init_hm(self):
+        orig_init_hm(self)
+        if self.humming_gemm_type().value.lower() != "indexed":
+            return
+        w13_cfg = self.humming_configs.get("w13")
+        if w13_cfg is None:
+            return
+        b_name = str(getattr(w13_cfg, "b_dtype", "")).lower()
+        a_name = str(getattr(w13_cfg, "a_dtype", "")).lower()
+        if "float4" in b_name and "bfloat16" in a_name and getattr(w13_cfg, "weight_scale_group_size", 0) == 16:
+            sm121_small_m = {
+                "block_shape": [16, 128, 128],
+                "warp_shape": [16, 32, 64],
+                "use_stream_k": False,
+                "use_f16_accum": False,
+                "num_sms": 48,
+                "num_stages": 3,
+                "num_ctas_per_sm": 1,
+                "output_chunk_rows": 0,
+                "use_pdl": True,
+                "use_tma": True,
+                "use_warp_spec": False,
+                "mma_type": "mma",
+                "use_tma_a": False,
+                "use_tma_c": False,
+                "use_tma_as": False,
+                "use_tma_as2": False,
+            }
+            for attr in ("w13_tuning_config", "w2_tuning_config"):
+                tc = getattr(self, attr, None)
+                if isinstance(tc, list) and tc:
+                    new_tc = [[0, 1840, dict(sm121_small_m)]]
+                    for lo, hi, cfg in tc:
+                        if hi > 1840:
+                            new_tc.append([max(lo, 1840), hi, cfg])
+                    setattr(self, attr, new_tc)
+                    setattr(self, f"{attr}_str", json.dumps(new_tc))
+            if not getattr(cls, "_spark_logged_nvfp4_sm121", False):
+                cls._spark_logged_nvfp4_sm121 = True
+                _log(
+                    "applied SM12.1 Humming NVFP4 small-M tuning "
+                    "(block=16x128x128, stages=3, stream_k=False, tma=True -> 3.4x faster M=1, 1.35x faster 8K prefill)"
+                )
+
+    cls.init_humming_moe = _patched_init_hm
+    _log("installed SM12.1 Humming NVFP4 MoE small-M tuning hook")
     return True
 
 
@@ -1531,7 +1986,7 @@ def _patch_hca_oproj_fused() -> bool:
                 )
         else:
             # BF16 wo_a path (e.g. W4A16_NVFP4 with lossless BF16 attention):
-            # Fused VHA V-mix + invRoPE -> group-major [G, T, HPG*D] BF16 + cuBLAS bmm
+            # Fused VHA V-mix + invRoPE -> group-major [G, T, HPG*D] BF16 + 12-bit packed BMM or cuBLAS bmm
             o_bf16 = vha_v_add_inv_rope_bf16(
                 o_chunk,
                 z_chunk,
@@ -1542,12 +1997,26 @@ def _patch_hca_oproj_fused() -> bool:
                 nope_dim=attn.nope_head_dim,
                 rope_dim=attn.rope_head_dim,
             )
-            grouped_w = wo_a.weight.view(n_groups, o_rank, -1)
-            torch.bmm(
-                o_bf16,
-                grouped_w.transpose(1, 2),
-                out=z_out.transpose(0, 1),
-            )
+            if hasattr(wo_a, "_spark_p12_values"):
+                z_out = torch.ops.spark_ernie.packed12_bf16_wo_a_bmm(
+                    o_bf16,
+                    wo_a._spark_p12_values,
+                    wo_a._spark_p12_exc_rows,
+                    wo_a._spark_p12_exc_entries,
+                    wo_a._spark_p12_row_offsets,
+                    wo_a.weight,
+                    n_groups,
+                    o_rank,
+                    wo_a._spark_p12_exp_base,
+                    64,
+                )
+            else:
+                grouped_w = wo_a.weight.view(n_groups, o_rank, -1)
+                torch.bmm(
+                    o_bf16,
+                    grouped_w.transpose(1, 2),
+                    out=z_out.transpose(0, 1),
+                )
 
         z_flat = z_out.view(tc, n_groups * o_rank)
         if gate_is_sigmoid:
@@ -1867,7 +2336,7 @@ def _patch_profile_prefill() -> bool:
                     n_splits=1, tile_n=1, **norm_kwargs,
                 )
             ev[1].record()
-            if lid == 1 and hasattr(self.attn, "_run_parallel_input_projections"):
+            if lid == 1 and hasattr(self.attn, "_run_parallel_input_projections") and self.attn.wo_a.weight.dtype == torch.float8_e4m3fn:
                 attn = self.attn
                 o_padded = torch.empty((T, attn.padded_heads, attn.head_dim), dtype=x.dtype, device=x.device)
                 qr_kv, kv_score, idx_kv_score, idx_w = attn._run_parallel_input_projections(x)
@@ -2124,6 +2593,20 @@ def _patch_gb10_uma_fadvise() -> bool:
     worker_cls.init_device = _patched_init_device
     worker_cls.load_model = _patched_load_model
     worker_cls.determine_available_memory = _patched_determine_available_memory
+    orig_compile_warmup = getattr(worker_cls, "compile_or_warm_up_model", None)
+    if orig_compile_warmup is not None:
+        def _patched_compile_warmup(self, *args, **kwargs):
+            res = orig_compile_warmup(self, *args, **kwargs)
+            try:
+                import gc
+                import torch
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            return res
+        worker_cls.compile_or_warm_up_model = _patched_compile_warmup
     worker_cls._spark_uma_fadvise_patched = True
     _log("installed GB10 UMA safetensors page-cache eviction + post-profile empty_cache fix (zero root)")
     return True
@@ -2400,6 +2883,12 @@ def install() -> dict[str, bool]:
         applied["fc2_latent_tp"] = _patch_fc2_latent_tp()
     if _env_flag("SPARK_PATCH_FC1_LATENT_TP", "0"):
         applied["fc1_latent_tp"] = _patch_fc1_latent_tp()
+    if _env_flag("SPARK_NVFP4_FP8_NON_EXPERTS", "1"):
+        applied["nvfp4_fp8_non_experts"] = _patch_nvfp4_fp8_non_experts()
+    if _env_flag("SPARK_PACKED_BF16_LINEARS", "0"):
+        applied["packed_bf16_linears"] = _patch_packed_bf16_linears()
+    if _env_flag("SPARK_PATCH_HUMMING_NVFP4_SM121", "1"):
+        applied["humming_nvfp4_sm121"] = _patch_humming_nvfp4_sm121()
     if _env_flag("SPARK_PATCH_GATE_BF16X2", "1"):
         applied["gate_bf16x2"] = _patch_gate_bf16x2()
     if _env_flag("SPARK_PATCH_HCA_OPROJ_FUSED", "1"):

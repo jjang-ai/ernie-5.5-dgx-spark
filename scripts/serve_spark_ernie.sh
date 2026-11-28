@@ -121,11 +121,30 @@ fi
 
 export SPARK_PATCH_VHA_TRITON="${SPARK_PATCH_VHA_TRITON:-1}"
 if [ "$IS_NVFP4" = "1" ]; then
-    export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-0}"
+    # Auto-enable load-time block-128 HummingFP8 non-expert conversion on W4A16_NVFP4 checkpoints
+    # (keeps all 96.8% routed experts in group-16 NVFP4 Marlin and HCA wo_a lossless BF16/12-bit!).
+    # Set SPARK_NVFP4_FP8_NON_EXPERTS=0 to keep 100% lossless BF16 non-experts.
+    export SPARK_NVFP4_FP8_NON_EXPERTS="${SPARK_NVFP4_FP8_NON_EXPERTS:-1}"
+    export SPARK_NVFP4_FP8_WO_A="${SPARK_NVFP4_FP8_WO_A:-0}"
+    if [[ "$MODE" == tp4-* ]]; then
+        export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-1}"
+        export SPARK_PATCH_FC2_LATENT_TP_BF16="${SPARK_PATCH_FC2_LATENT_TP_BF16:-1}"
+        export SPARK_PACKED_BF16_LINEARS="${SPARK_PACKED_BF16_LINEARS:-1}"
+    else
+        export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-0}"
+        export SPARK_PATCH_FC2_LATENT_TP_BF16="${SPARK_PATCH_FC2_LATENT_TP_BF16:-0}"
+        export SPARK_PACKED_BF16_LINEARS="${SPARK_PACKED_BF16_LINEARS:-0}"
+        export SPARK_HCA_PIPE_MIN_T="${SPARK_HCA_PIPE_MIN_T:-2048}"
+    fi
 else
+    export SPARK_NVFP4_FP8_NON_EXPERTS="${SPARK_NVFP4_FP8_NON_EXPERTS:-0}"
     export SPARK_PATCH_FC2_LATENT_TP="${SPARK_PATCH_FC2_LATENT_TP:-1}"
+    export SPARK_PATCH_FC2_LATENT_TP_BF16="${SPARK_PATCH_FC2_LATENT_TP_BF16:-0}"
+    export SPARK_PACKED_BF16_LINEARS="${SPARK_PACKED_BF16_LINEARS:-0}"
 fi
 export SPARK_PATCH_FC1_LATENT_TP="${SPARK_PATCH_FC1_LATENT_TP:-0}"
+export SPARK_PACKED_BF16_FREE_ORIG="${SPARK_PACKED_BF16_FREE_ORIG:-0}"
+export SPARK_PATCH_HUMMING_NVFP4_SM121="${SPARK_PATCH_HUMMING_NVFP4_SM121:-1}"
 export SPARK_PATCH_GATE_BF16X2="${SPARK_PATCH_GATE_BF16X2:-1}"
 export SPARK_PATCH_HCA_OPROJ_FUSED="${SPARK_PATCH_HCA_OPROJ_FUSED:-1}"
 export SPARK_HCA_PIPELINE="${SPARK_HCA_PIPELINE:-1}"
@@ -206,9 +225,13 @@ case "$MODE" in
         PAR_ARGS=(--tensor-parallel-size 2 --enable-expert-parallel --nnodes 2 --node-rank "$RANK")
         SPEC_ARGS=(--speculative-config "{\"method\":\"dspark\",\"num_speculative_tokens\":${DSPARK_K},\"draft_sample_method\":\"${DSPARK_SAMPLE}\"${DSPARK_EXTRA}}")
         MAX_SEQS="${SPARK_MAX_NUM_SEQS:-8}"
-        GPU_UTIL="${SPARK_GPU_MEM_UTIL:-0.86}"
+        GPU_UTIL="${SPARK_GPU_MEM_UTIL:-0.82}"
         MAX_BATCHED="${SPARK_MAX_NUM_BATCHED_TOKENS:-2048}"
-        CG_MAX_SIZE="${SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE:-64}"
+        if [ "$IS_NVFP4" = "1" ]; then
+            CG_MAX_SIZE="${SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE:-32}"
+        else
+            CG_MAX_SIZE="${SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE:-64}"
+        fi
         KV_MEM_BYTES="${SPARK_KV_CACHE_MEMORY_BYTES:-9663676416}"
         export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS="${VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:-0}"
         ;;
