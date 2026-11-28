@@ -2368,6 +2368,12 @@ def install() -> dict[str, bool]:
         sys.path.insert(0, repo_str)
 
     applied: dict[str, bool] = {}
+    try:
+        from .sm120_attention import install as install_sm120_attention
+        applied["sm120_attention"] = install_sm120_attention()
+    except Exception as exc:
+        applied["sm120_attention"] = False
+        _log(f"skip sm120_attention patch (import failed: {exc!r})")
     if _env_flag("SPARK_PATCH_FLASHINFER_CPB", "1"):
         applied["flashinfer_cpb"] = _patch_flashinfer_sm120_cpb()
     if _env_flag("SPARK_PATCH_ROUTER", "1"):

@@ -17,3 +17,12 @@ spark-ernie = "spark_ernie_runtime.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["spark_ernie_runtime*", "kernels*"]
+
+[tool.mutmut]
+source_paths = ["spark_ernie_runtime"]
+only_mutate = ["spark_ernie_runtime/sm120_attention.py"]
+also_copy = ["kernels"]
+pytest_add_cli_args = ["--disable-warnings", "-x"]
+pytest_add_cli_args_test_selection = ["tests/test_sm120_attention.py"]
+process_isolation = "forkserver"
+forkserver_warmup = "none"
