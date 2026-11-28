@@ -89,22 +89,24 @@ Verified **`4/4 PASS`** on **BOTH `4×` Ring AND `2×` Direct** via `benchmarks/
 | **OpenAI `/v1/responses` — Prefix Cache + `off`/`high` Efforts** | `4.65s` -> **`0.352s`** (**`13.2×`**) | `6.55s` -> **`0.422s`** (**`15.5×`**) | **`96.7%`** (`12,544` tok) | Native `input_tokens_details.cached_tokens` populated |
 | **Anthropic `/v1/messages` — `x-api-key`, `thinking=disabled` & `enabled`** | `4.67s` -> **`0.346s`** (`off`, **`13.5×`**) / **`0.381s`** (`high` + reminder, **`12.2×`**!) | `6.55s` -> **`0.414s`** (`off`, **`15.8×`**) / **`0.767s`** (`high` + reminder) | **`96.8%`** (`off`) / **`96.4%`** (`high` + reminder!) | **`81.5–85.6 tok/s`** warm decode; `count_tokens=12,955` |
 
-### 4b. W4A16 NVFP4 + Lossless BF16 Attention (`2×` Direct `2x-nvfp4-512k-fast` vs `2×` MXFP4 `2x-1m-fast`)
-Measured head-to-head on `2×` DGX Spark (`TP=2 + EP=2`, DSpark ON, `SPARK_MOE_BACKEND=marlin`, lossless BF16 attention + fused `vha_v_add_inv_rope_bf16`, **`563,470` KV tokens = `1.07× 512K`** on `2×`, full `1M` on `4×` via `4x-nvfp4-1m-fast`, **`0` loops across all benchmarks**):
+### 4b. W4A16 NVFP4 + Lossless BF16 Attention (`2×` & `4×` Switchless DGX Spark vs `MXFP4`)
+Measured end-to-end on real **`2×` (`2x-nvfp4-512k-fast`, `563,470` KV tok)** and **`4×` (`4x-nvfp4-1m-fast`, `1,953,160` KV tok = `1.86×` `1M`!)** DGX Sparks (`SPARK_MOE_BACKEND=marlin`, lossless BF16 attention + fused `vha_v_add_inv_rope_bf16`, DSpark ON, **`0` loops across every single benchmark including `19`-turn `1,041,479`-token growing agentic tool stress!**):
 
-| Metric (`2×` DGX Spark, DSpark ON) | `2×` `2x-nvfp4-512k-fast` (`W4A16_NVFP4` + BF16 Attn) | `2×` `2x-1m-fast` (`MXFP4` + FP8 Attn) | Ratio / Notes |
-|---|---:|---:|---|
-| **Weights / Spark** | `87.89 GiB` (`marlin`) / `87.97 GiB` (`humming`) | `79.70 GiB` | Lossless BF16 non-experts (`17.97 GiB` total) |
-| **KV Cache Pool (`2×` / `4×`)** | **`563,470` tok (`512K`)** / **`1M` on `4×`** | `1,143,108` tok (`1M`) | Byte-packed KV (`12` groups) |
-| **`off_code` (`B=1`, SPSC ring)** | **`44.0 tok/s`** | `51.3 tok/s` | `0.86×` |
-| **`off_prose` (`B=1`)** | **`29.1 tok/s`** | `36.8 tok/s` | `0.79×` |
-| **`high_math` / `high_zh` (`B=1`)** | **`42.5` / `58.1 tok/s`** | `58.8` / `77.0 tok/s` | `0.72–0.75×` |
-| **8-Turn Coding (`T=1.0, high`)** | **`44.9 avg / 49.3 pk`** (`8/8 stop, 0/8 loops`) | `56.0 avg / 69.7 pk` | `0.80×` (`turn1_recall=True`) |
-| **Cold Prefill (`8K` / `32K`)** | **`1,505` / `1,768 tok/s`** (`3/3` recall) | `1,971` / `2,004 tok/s` | `0.76–0.88×` |
-| **Warm TTFT (`8K` / `32K`)** | **`0.444s` (`10.3×`) / `0.597s` (`25.9×`)** | `0.380s` / `0.485s` | Full VRAM prefix cache |
-| **Concurrency `B=8` (`T=1.0`, Prose / Code)** | **`114.5` (`15.7`/req) / `143.9` (`19.8`/req)** | `139.3` / `168.3 tok/s` | `0.82–0.85×` (`0` loops) |
+| Metric (DSpark ON, `0` Loops) | **`2×` NVFP4 (`2x-nvfp4-512k-fast`)** | **`4×` NVFP4 (`4x-nvfp4-1m-fast`)** | `4×` MXFP4 (`4x-1m-fast`) |
+|---|---:|---:|---:|
+| **Weights / Spark** | `87.89 GiB` | **`46.83 GiB`** (`20–22 GiB` avail RAM) | `41.50 GiB` |
+| **KV Cache Pool** | **`563,470` tok (`512K`)** | **`1,953,160` tok (`1.86× 1M`!)** | `2,114,201` tok |
+| **`off_code` / `algo_off` (`B=1`)** | `44.0` / `47.1 tok/s` | **`67.2`** (`0.135s` TTFT) / **`75.4 tok/s`** | `75.3` / `105.6` |
+| **`off_prose` / `high_math` / `high_zh` (`B=1`)** | `29.1` / `42.5` / `58.1` | **`42.0` / `67.6` / `83.4 tok/s`** | `59.2` / `79.6` / `104.8` |
+| **8-Turn Coding (`T=1.0, high`, `0/8` loops)** | `44.9 avg / 49.3 pk` | **`55.0 avg / 64.8 pk`** (`8/8 stop, T1 recall`) | `79.6 avg / 93.5 pk` |
+| **Cold Prefill (`8K` / `32K` / `64K`, `3/3` recall)** | `1,505` / `1,768` / — | **`1,862` / `2,254` / `2,209 tok/s`** | `2,753` / `2,747` / `2,663` |
+| **Warm TTFT (`8K` / `32K` / `64K`)** | `0.444s` / `0.597s` / — | **`0.372s` (`9.9×`) / `0.429s` (`28.2×`) / `0.662s` (`37.3×`)** | `0.316s` / `0.468s` / — |
+| **Concurrency `B=8` / `B=16` / `B=32` (Prose)** | `114.5` / — / — | **`169.1` / `257.2` / `375.8 tok/s`** | `210.6` / `278.3` / `415.1` |
+| **Concurrency `B=8` / `B=16` / `B=32` (Code)** | `143.9` / — / — | **`209.5` / `288.7` / `416.6 tok/s`** | `309.2` / `441.4` / `611.0` |
+| **Harsh Multi-API Prefix Cache (`Chat` / `Responses` / `Anthropic`)** | — | **`4/4 PASS`: `95.9%–97.6%` hits (`0.36–0.45s`, `91.2 tok/s` Anthropic warm dec!)** | `4/4 PASS` |
+| **`1M` Growing Agentic Tool Stress (`19` turns → `1,041,479` tok)** | — | **`19/19` valid JSON tools, `0` loops (`rep8=0.000`), `19/19` T1+latest recall, `99.9%–100%` cache (`6.91s` TTFT, `52.9 tok/s` @ `1.04M`!)** | `1M` verified |
 
-*Why `0.80–0.88×` vs MXFP4:* keeping all `17.97 GiB` of non-expert layers in lossless BF16 (vs `~9 GiB` FP8) adds `+3.7 GiB/Spark` of LPDDR5X read per decode step (`~13.5 ms` at `273 GB/s`), shifting the base AR step from `~39 ms` to `51.9 ms` while DSpark acceptance stays identical (`pos0 = 72.4%`, `pos1..6 = 58.7%–69.3%`). All three SM12.1 NVFP4 MoE backends (`marlin`, `humming` indexed, `humming` grouped) are verified `cos >= 0.999991`.
+*Why NVFP4 + BF16 attn runs at `0.80–0.90×` MXFP4:* keeping all `17.97 GiB` of non-expert layers in lossless BF16 (vs `~9 GiB` FP8) adds `+3.7 GiB/Spark` (`2×`) / `+2.3 GiB/Spark` (`4×`) of LPDDR5X read per step while DSpark acceptance matches MXFP4 (`pos0 = 72.4%`, `pos1..6 = 58.7%–69.3%`). All three SM12.1 NVFP4 MoE backends (`marlin`, `humming` indexed, `humming` grouped) are verified `cos >= 0.999991`.
 
 ---
 
