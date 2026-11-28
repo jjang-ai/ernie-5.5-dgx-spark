@@ -10,6 +10,7 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+mutants/
 .venv/
 *.log
 cluster.json
