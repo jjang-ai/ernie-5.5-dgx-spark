@@ -275,7 +275,9 @@ PROFILES: dict[str, dict[str, str]] = {
         "SPARK_MAX_NUM_SEQS": "64",
         "SPARK_MAX_MODEL_LEN": "1048576",
         "SPARK_MAX_NUM_BATCHED_TOKENS": "8192",
-        "SPARK_GPU_MEM_UTIL": "0.72",
+        "SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE": "256",
+        "SPARK_GPU_MEM_UTIL": "0.71",
+        "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": "0",
     },
     "4x-nvfp4-1m-lossless": {
         "mode": "tp4-dspark",
@@ -310,7 +312,9 @@ PROFILES: dict[str, dict[str, str]] = {
         "SPARK_MAX_NUM_SEQS": "32",
         "SPARK_MAX_MODEL_LEN": "1048576",
         "SPARK_MAX_NUM_BATCHED_TOKENS": "8192",
-        "SPARK_GPU_MEM_UTIL": "0.72",
+        "SPARK_MAX_CUDAGRAPH_CAPTURE_SIZE": "256",
+        "SPARK_GPU_MEM_UTIL": "0.71",
+        "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": "0",
     },
     "4x-dual-tp2-nvfp4-fast": {
         "mode": "dual-tp2-dspark",

@@ -2781,6 +2781,14 @@ def _patch_anthropic_and_api_compat() -> bool:
             orig_render_ids = r_cls._render_ids
 
             def _patched_render_ids(self, conversation, params):
+                # Map OpenAI/VS Code Copilot 'developer' role -> 'system' for encoding_ernie.py compat
+                if isinstance(conversation, list) and any(
+                    isinstance(m, dict) and m.get("role") == "developer" for m in conversation
+                ):
+                    conversation = [
+                        ({**m, "role": "system"} if isinstance(m, dict) and m.get("role") == "developer" else m)
+                        for m in conversation
+                    ]
                 tk = _normalize_tk_dict(getattr(params, "chat_template_kwargs", None) or {})
                 return orig_render_ids(self, conversation, dataclasses.replace(params, chat_template_kwargs=tk))
 
